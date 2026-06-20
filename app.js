@@ -153,10 +153,31 @@
 
         if (!_supabase && !initSupabase()) return;
 
-        const { data, error } = await _supabase
+        let query = _supabase
             .from(currentSection)
             .select('*')
             .order('id', { ascending: false });
+
+        const loggedUser = localStorage.getItem('loggedUser');
+        const loggedUserRole = localStorage.getItem('loggedUserRole') || 'usuario';
+
+        if (loggedUserRole !== 'admin' && loggedUserRole !== '1') {
+            const userMapping = {
+                'FCORASCON': 'FRANCISCO RASCON',
+                'MARITZAESTRADA': 'MARITZA ESTRADA'
+            };
+            const mappedName = userMapping[loggedUser] || loggedUser;
+
+            if (currentSection === 'recibida') {
+                query = query.eq('Recibio', mappedName);
+            } else if (currentSection === 'despachada') {
+                query = query.eq('Elaboro', mappedName);
+            } else {
+                query = query.eq('id', -1); // Hide data for other sections if not admin
+            }
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error:', error);
@@ -165,6 +186,28 @@
         }
 
         allData = data || [];
+
+        if (currentSection === 'recibida' || currentSection === 'despachada') {
+            const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : 'Fecha';
+            allData.sort((a, b) => {
+                function parseDateStr(str) {
+                    if (!str) return 0;
+                    if (str.includes('/')) {
+                        const parts = str.split('/');
+                        if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+                    }
+                    return new Date(str).getTime() || 0;
+                }
+                const dateA = parseDateStr(a[dateField]);
+                const dateB = parseDateStr(b[dateField]);
+                // If dates are equal, sort by ID descending as fallback
+                if (dateB === dateA) {
+                    return (b.id || 0) - (a.id || 0);
+                }
+                return dateB - dateA;
+            });
+        }
+
         updateStats(allData.length);
         renderGrid(allData);
     }
@@ -457,17 +500,78 @@
         currentEditId = null;
     };
 
+    window.exportDailyExcel = function () {
+        if (!allData || allData.length === 0) {
+            alert('No hay datos para exportar.');
+            return;
+        }
+
+        let selectedDateStr = document.getElementById('exportDate').value;
+
+        if (!selectedDateStr) {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            selectedDateStr = `${yyyy}-${mm}-${dd}`;
+        }
+
+        let dateField = '';
+        if (currentSection === 'recibida') dateField = 'Fecha_Recibido';
+        else if (currentSection === 'despachada') dateField = 'Fecha';
+        else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
+        else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+
+        const dailyData = allData.filter(item => {
+            const itemDate = item[dateField];
+            return itemDate && itemDate.startsWith(selectedDateStr);
+        });
+
+        if (dailyData.length === 0) {
+            alert(`No hay registros del día (${selectedDateStr}) en esta sección.`);
+            return;
+        }
+
+        const exportData = dailyData.map(item => {
+            const row = {};
+            schemas[currentSection].forEach(field => {
+                if (field.type !== 'file') {
+                    row[field.name] = item[field.id];
+                }
+            });
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+
+        XLSX.writeFile(wb, `Reporte_${currentSection}_${selectedDateStr}.xlsx`);
+    };
+
     function checkSession() {
         const loggedUser = localStorage.getItem('loggedUser');
+        const loggedUserRole = localStorage.getItem('loggedUserRole') || 'usuario';
         if (loggedUser) {
             document.getElementById('loginOverlay').style.display = 'none';
             document.querySelector('.user-name').innerText = loggedUser;
+            document.querySelector('.user-role').innerText = (loggedUserRole === 'admin' || loggedUserRole === '1') ? 'Administrador' : 'Usuario';
             return true;
         }
         return false;
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Set default date for export
+        const todayForExport = new Date();
+        const exportYyyy = todayForExport.getFullYear();
+        const exportMm = String(todayForExport.getMonth() + 1).padStart(2, '0');
+        const exportDd = String(todayForExport.getDate()).padStart(2, '0');
+        const dateInput = document.getElementById('exportDate');
+        if (dateInput) {
+            dateInput.value = `${exportYyyy}-${exportMm}-${exportDd}`;
+        }
+
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
             loginForm.onsubmit = async (e) => {
@@ -487,8 +591,10 @@
 
                 if (data) {
                     localStorage.setItem('loggedUser', user.toUpperCase());
+                    localStorage.setItem('loggedUserRole', data.rol ? String(data.rol).toLowerCase() : 'usuario');
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.user-name').innerText = user.toUpperCase();
+                    document.querySelector('.user-role').innerText = (String(data.rol) === 'admin' || String(data.rol) === '1') ? 'Administrador' : 'Usuario';
                     loadData();
                 } else {
                     errorMsg.style.display = 'block';
