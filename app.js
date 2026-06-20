@@ -13,12 +13,12 @@
     const schemas = {
         recibida: [
             { id: 'Fecha_Recibido', name: 'FECHA RECIBIDO', type: 'date' },
-            { id: 'Remite', name: 'REMITE', type: 'text' },
+            { id: 'Remite', name: 'REMITE', type: 'text', full: true },
             { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true },
             { id: 'Recibio', name: 'RECIBIÓ', type: 'select', source: 'autorizados' },
             { id: 'fecha_evento', name: 'FECHA EVENTO', type: 'date' },
             { id: 'HORA', name: 'HORA', type: 'time' },
-            { id: 'Lugar', name: 'LUGAR', type: 'text' },
+            { id: 'Lugar', name: 'LUGAR', type: 'text', full: true },
             { id: 'TELEFONO', name: 'TELÉFONO', type: 'text' },
             { id: 'CORREO', name: 'CORREO', type: 'text' },
             { id: 'PDF-Imagen', name: 'ARCHIVO/PDF', type: 'file' }
@@ -158,25 +158,6 @@
             .select('*')
             .order('id', { ascending: false });
 
-        const loggedUser = localStorage.getItem('loggedUser');
-        const loggedUserRole = localStorage.getItem('loggedUserRole') || 'usuario';
-
-        if (loggedUserRole !== 'admin' && loggedUserRole !== '1') {
-            const userMapping = {
-                'FCORASCON': 'FRANCISCO RASCON',
-                'MARITZAESTRADA': 'MARITZA ESTRADA'
-            };
-            const mappedName = userMapping[loggedUser] || loggedUser;
-
-            if (currentSection === 'recibida') {
-                query = query.eq('Recibio', mappedName);
-            } else if (currentSection === 'despachada') {
-                query = query.eq('Elaboro', mappedName);
-            } else {
-                query = query.eq('id', -1); // Hide data for other sections if not admin
-            }
-        }
-
         const { data, error } = await query;
 
         if (error) {
@@ -208,16 +189,75 @@
             });
         }
 
-        updateStats(allData.length);
-        renderGrid(allData);
+        updateStats(allData);
+        applyFiltersAndRender();
     }
 
-    function updateStats(total) {
+    function updateStats(data) {
         const stats = document.querySelectorAll('.stat-count');
-        if (stats.length >= 1) stats[0].innerText = total.toLocaleString();
-        if (stats.length >= 2) stats[1].innerText = Math.floor(total * 0.15).toLocaleString(); // Mockup logic
-        if (stats.length >= 3) stats[2].innerText = Math.floor(total * 0.05).toLocaleString(); // Mockup logic
-        if (stats.length >= 4) stats[3].innerText = "0"; // Mockup logic
+        if (!stats.length) return;
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        let thisMonthCount = 0;
+        let pendientesCount = 0;
+        let urgentesCount = 0;
+
+        let dateField = '';
+        if (currentSection === 'recibida') dateField = 'Fecha_Recibido';
+        else if (currentSection === 'despachada') dateField = 'Fecha';
+        else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
+        else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+
+        data.forEach(item => {
+            // Este Mes logic
+            const dateStr = item[dateField];
+            if (dateStr) {
+                let m = -1, y = -1;
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        m = parseInt(parts[1], 10) - 1;
+                        y = parseInt(parts[2], 10);
+                    }
+                } else if (dateStr.includes('-')) {
+                    const parts = dateStr.split('-');
+                    if (parts.length >= 3) {
+                        y = parseInt(parts[0], 10);
+                        m = parseInt(parts[1], 10) - 1;
+                    }
+                }
+                if (m === currentMonth && y === currentYear) {
+                    thisMonthCount++;
+                }
+            }
+
+            // Pendientes / Urgentes logic (búsqueda genérica)
+            let isPendiente = false;
+            let isUrgente = false;
+
+            if (item.Estatus) {
+                const estatus = String(item.Estatus).toLowerCase();
+                if (estatus.includes('pendiente')) isPendiente = true;
+                if (estatus.includes('urgente')) isUrgente = true;
+            }
+
+            if (!isPendiente || !isUrgente) {
+                const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
+                if (!isPendiente && allValues.includes('pendiente')) isPendiente = true;
+                if (!isUrgente && allValues.includes('urgente')) isUrgente = true;
+            }
+
+            if (isPendiente) pendientesCount++;
+            if (isUrgente) urgentesCount++;
+        });
+
+        if (stats.length >= 1) stats[0].innerText = data.length.toLocaleString();
+        if (stats.length >= 2) stats[1].innerText = thisMonthCount.toLocaleString();
+        if (stats.length >= 3) stats[2].innerText = pendientesCount.toLocaleString();
+        if (stats.length >= 4) stats[3].innerText = urgentesCount.toLocaleString();
     }
 
     function renderFileLinks(val, label = 'Ver') {
@@ -356,6 +396,51 @@
         document.querySelector('.page-info').innerText = `Mostrando ${data.length} registros`;
     }
 
+    let currentFilter = 'todos';
+
+    function applyFiltersAndRender() {
+        let filtered = allData;
+
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput && searchInput.value) {
+            const term = searchInput.value.toLowerCase();
+            filtered = filtered.filter(item => {
+                return Object.values(item).some(val => String(val).toLowerCase().includes(term));
+            });
+        }
+
+        if (currentFilter === 'recientes') {
+            const now = new Date();
+            const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+            
+            let dateField = '';
+            if (currentSection === 'recibida') dateField = 'Fecha_Recibido';
+            else if (currentSection === 'despachada') dateField = 'Fecha';
+            else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
+            else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+
+            filtered = filtered.filter(item => {
+                const dateStr = item[dateField];
+                if (!dateStr) return false;
+                let itemDate;
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) itemDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                } else {
+                    itemDate = new Date(dateStr);
+                }
+                return itemDate && !isNaN(itemDate.getTime()) && itemDate >= thirtyDaysAgo;
+            });
+        } else if (currentFilter === 'archivados') {
+            filtered = filtered.filter(item => {
+                const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
+                return allValues.includes('archivado') || allValues.includes('concluido') || allValues.includes('atendido') || allValues.includes('entregada');
+            });
+        }
+
+        renderGrid(filtered);
+    }
+
     function switchSection(section) {
         currentSection = section;
         const titleElem = document.getElementById('sectionTitle');
@@ -365,6 +450,14 @@
             item.classList.remove('active');
             if (item.dataset.section === section) item.classList.add('active');
         });
+
+        currentFilter = 'todos';
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        const allBtn = Array.from(document.querySelectorAll('.filter-btn')).find(b => b.innerText.toLowerCase().includes('todos'));
+        if (allBtn) allBtn.classList.add('active');
+
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = '';
 
         loadData();
     }
@@ -620,14 +713,22 @@
 
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
-            searchInput.oninput = function (e) {
-                const term = e.target.value.toLowerCase();
-                const filtered = allData.filter(item => {
-                    return Object.values(item).some(val => String(val).toLowerCase().includes(term));
-                });
-                renderGrid(filtered);
-            };
+            searchInput.oninput = () => applyFiltersAndRender();
         }
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+
+                const text = e.target.innerText.toLowerCase();
+                if (text.includes('todos')) currentFilter = 'todos';
+                else if (text.includes('recientes')) currentFilter = 'recientes';
+                else if (text.includes('archivados')) currentFilter = 'archivados';
+
+                applyFiltersAndRender();
+            };
+        });
 
         const dataForm = document.getElementById('dataForm');
         if (dataForm) {
