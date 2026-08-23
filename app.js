@@ -274,11 +274,11 @@
         return '-';
     }
 
-    async function uploadFiles(files) {
+    async function uploadFiles(files, limit = 10) {
         if (!files || files.length === 0) return null;
-        const uploadPromises = Array.from(files).slice(0, 5).map(async (file) => {
+        const uploadPromises = Array.from(files).slice(0, limit).map(async (file) => {
             const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
             const filePath = `${currentSection}/${fileName}`;
 
             const { data, error } = await _supabase.storage
@@ -524,9 +524,9 @@
             if (field.type === 'file') {
                 div.innerHTML = `
                     <label>${field.name}</label>
-                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple>
+                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>10){const dt=new DataTransfer();Array.from(this.files).slice(0,10).forEach(f=>dt.items.add(f));this.files=dt.files;alert('Solo se permiten hasta 10 archivos. Se cargarán los primeros 10.');}">
                     ${isEdit && value ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos: ${renderFileLinks(value)}</small>` : ''}
-                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo 5 archivos.</small>
+                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo 10 archivos (pdf, jpeg, png, etc.).</small>
                 `;
             } else if (field.type === 'select') {
                 const valTarget = String(value || '').toUpperCase().trim();
@@ -749,10 +749,27 @@
 
                         const input = e.target.querySelector(`[name="${key}"]`);
 
-                        if (fieldDef.type === 'file') {
+                         if (fieldDef.type === 'file') {
                             const files = input ? input.files : null;
                             if (files && files.length > 0) {
-                                entry[key] = await uploadFiles(files);
+                                const uploaded = await uploadFiles(files);
+                                if (uploaded) {
+                                    const newUrls = JSON.parse(uploaded);
+                                    let existingUrls = [];
+                                    if (currentEditId) {
+                                        const existingItem = allData.find(d => d.id === currentEditId);
+                                        if (existingItem && existingItem[key]) {
+                                            try {
+                                                existingUrls = JSON.parse(existingItem[key]);
+                                                if (!Array.isArray(existingUrls)) existingUrls = [existingItem[key]];
+                                            } catch (e) {
+                                                existingUrls = [existingItem[key]];
+                                            }
+                                        }
+                                    }
+                                    const combined = existingUrls.concat(newUrls).slice(0, 10);
+                                    entry[key] = JSON.stringify(combined);
+                                }
                             } else if (currentEditId) {
                                 const existingItem = allData.find(d => d.id === currentEditId);
                                 if (existingItem && existingItem[key]) {
