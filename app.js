@@ -363,11 +363,11 @@
                 const inicFiles = inicFileFields
                     .map(([f, label]) => {
                         const links = renderFileLinks(item[f]);
-                        return (links && links !== '-') ? `<span class="inic-file"><small>${label}</small> ${links}</span>` : '';
+                        const content = (links && links !== '-') ? links : '<span style="color:var(--text-muted)">—</span>';
+                        return `<span class="inic-file"><small>${label}</small> ${content}</span>`;
                     })
-                    .filter(Boolean)
                     .join(' ');
-                fileHtml = inicFiles || '-';
+                fileHtml = inicFiles;
             }
             else if (currentSection === 'proposiciones') {
                 titleVal = `Proposición #${item.id || ''}`;
