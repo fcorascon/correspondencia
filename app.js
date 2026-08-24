@@ -354,7 +354,11 @@
                 subtitleVal = item.texto || item.INICIATIVA;
                 detailVal = item.comision || 'SIN COMISIÓN';
                 metaHtml = `<span class="badge badge-warning">${item.fecha_oficio || 'OFICIO'}</span>`;
-                fileHtml = renderFileLinks(item.pdf);
+                const inicFiles = ['pdf', 'opinion_consultoria', 'proyecto_dictamen', 'proyecto_decreto']
+                    .map(f => renderFileLinks(item[f]))
+                    .filter(h => h && h !== '-')
+                    .join(' ');
+                fileHtml = inicFiles || '-';
             }
             else if (currentSection === 'proposiciones') {
                 titleVal = `Proposición #${item.id || ''}`;
