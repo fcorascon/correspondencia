@@ -46,7 +46,10 @@
             { id: 'dictaminada_favor_contra', name: 'DICTAMEN', type: 'text' },
             { id: 'decreto', name: 'DECRETO', type: 'text' },
             { id: 'objeto', name: 'OBJETO', type: 'text', full: true },
-            { id: 'pdf', name: 'PDF', type: 'file' }
+            { id: 'pdf', name: 'PDF', type: 'file', maxFiles: 10 },
+            { id: 'opinion_consultoria', name: 'OPINIÓN CONSULTORÍA', type: 'file', maxFiles: 5 },
+            { id: 'proyecto_dictamen', name: 'PROYECTO DICTAMEN', type: 'file', maxFiles: 5 },
+            { id: 'proyecto_decreto', name: 'PROYECTO DECRETO', type: 'file', maxFiles: 5 }
         ],
         proposiciones: [
             { id: 'id', name: 'ID', type: 'text', readonly: true },
@@ -522,11 +525,12 @@
             const value = isEdit ? (item[field.id] || '') : '';
 
             if (field.type === 'file') {
+                const maxFiles = field.maxFiles || 10;
                 div.innerHTML = `
                     <label>${field.name}</label>
-                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>10){const dt=new DataTransfer();Array.from(this.files).slice(0,10).forEach(f=>dt.items.add(f));this.files=dt.files;alert('Solo se permiten hasta 10 archivos. Se cargarán los primeros 10.');}">
+                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;alert('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.');}">
                     ${isEdit && value ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos: ${renderFileLinks(value)}</small>` : ''}
-                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo 10 archivos (pdf, jpeg, png, etc.).</small>
+                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (pdf, jpeg, png, etc.).</small>
                 `;
             } else if (field.type === 'select') {
                 const valTarget = String(value || '').toUpperCase().trim();
@@ -750,9 +754,10 @@
                         const input = e.target.querySelector(`[name="${key}"]`);
 
                          if (fieldDef.type === 'file') {
+                            const maxFiles = fieldDef.maxFiles || 10;
                             const files = input ? input.files : null;
                             if (files && files.length > 0) {
-                                const uploaded = await uploadFiles(files);
+                                const uploaded = await uploadFiles(files, maxFiles);
                                 if (uploaded) {
                                     const newUrls = JSON.parse(uploaded);
                                     let existingUrls = [];
@@ -767,7 +772,7 @@
                                             }
                                         }
                                     }
-                                    const combined = existingUrls.concat(newUrls).slice(0, 10);
+                                    const combined = existingUrls.concat(newUrls).slice(0, maxFiles);
                                     entry[key] = JSON.stringify(combined);
                                 }
                             } else if (currentEditId) {
