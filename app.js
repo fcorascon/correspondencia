@@ -354,9 +354,18 @@
                 subtitleVal = item.texto || item.INICIATIVA;
                 detailVal = item.comision || 'SIN COMISIÓN';
                 metaHtml = `<span class="badge badge-warning">${item.fecha_oficio || 'OFICIO'}</span>`;
-                const inicFiles = ['pdf', 'opinion_consultoria', 'proyecto_dictamen', 'proyecto_decreto']
-                    .map(f => renderFileLinks(item[f]))
-                    .filter(h => h && h !== '-')
+                const inicFileFields = [
+                    ['pdf', 'PDF'],
+                    ['opinion_consultoria', 'OP. CONSULTORÍA'],
+                    ['proyecto_dictamen', 'PROY. DICTAMEN'],
+                    ['proyecto_decreto', 'PROY. DECRETO']
+                ];
+                const inicFiles = inicFileFields
+                    .map(([f, label]) => {
+                        const links = renderFileLinks(item[f]);
+                        return (links && links !== '-') ? `<span class="inic-file"><small>${label}</small> ${links}</span>` : '';
+                    })
+                    .filter(Boolean)
                     .join(' ');
                 fileHtml = inicFiles || '-';
             }
