@@ -37,11 +37,19 @@
         </div>
     </div>
 
+    <!-- Sidebar Backdrop for mobile -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <!-- Sidebar -->
-    <aside>
-        <div class="logo-container">
-            <div class="logo-icon">C</div>
-            <div class="logo-text">Correspondencia</div>
+    <aside id="sidebar">
+        <div class="sidebar-header-row">
+            <div class="logo-container">
+                <div class="logo-icon">C</div>
+                <div class="logo-text">Correspondencia</div>
+            </div>
+            <button class="btn-sidebar-close" id="sidebarCloseBtn" title="Cerrar Menú">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
 
         <nav>
@@ -57,11 +65,12 @@
             <div class="nav-item" data-section="proposiciones">
                 <i class="bi bi-pencil-square"></i> <span>Proposiciones</span>
             </div>
-
-
+            <div class="nav-item" data-section="fiscalizacion">
+                <i class="bi bi-clipboard2-check"></i> <span>Fiscalización</span>
+            </div>
         </nav>
 
-        <div style="margin-top: auto; padding-top: 2rem; border-top: 1px solid var(--border);">
+        <div style="margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border);">
             <div class="nav-item" style="padding: 0.5rem;">
                 <i class="bi bi-question-circle"></i> <span>Ayuda</span>
             </div>
@@ -70,9 +79,14 @@
 
     <!-- Header -->
     <header>
-        <div class="search-container">
-            <i class="bi bi-search"></i>
-            <input type="text" id="searchInput" placeholder="Buscar registros...">
+        <div class="header-left">
+            <button class="btn-menu-toggle" id="menuToggle" title="Abrir Menú">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="search-container">
+                <i class="bi bi-search"></i>
+                <input type="text" id="searchInput" placeholder="Buscar registros...">
+            </div>
         </div>
         <div class="user-profile">
             <div class="user-info">
@@ -122,11 +136,25 @@
         </div>
 
         <div class="table-container">
-            <div class="table-header">
-                <div class="table-filters" id="tableFilters">
+            <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <div class="table-filters" id="tableFilters" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <button class="filter-btn active">Ver todos</button>
                     <button class="filter-btn">Recientes</button>
                     <button class="filter-btn">Archivados</button>
+                    <select id="yearFilter" style="padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; color: #344054; background: white; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; outline: none;">
+                        <option value="">Todos los Años</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026">2026</option>
+                        <option value="2027">2027</option>
+                        <option value="2028">2028</option>
+                        <option value="2029">2029</option>
+                        <option value="2030">2030</option>
+                    </select>
+                </div>
+                <div class="table-search" style="position: relative; min-width: 260px; max-width: 380px; flex: 1;">
+                    <i class="bi bi-search" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.875rem;"></i>
+                    <input type="text" id="tableSearchInput" placeholder="Buscar por año, dependencia, dictamen..." style="width: 100%; padding: 0.5rem 1rem 0.5rem 2.3rem; font-size: 0.875rem; border: 1px solid var(--border); border-radius: 8px; outline: none; background: white; color: var(--text-main);">
                 </div>
             </div>
 
@@ -135,10 +163,10 @@
             </div>
 
             <div class="pagination">
-                <div class="page-info">Página 1 de 10</div>
+                <div class="page-info" id="pageInfo">Página 1 de 1</div>
                 <div class="page-controls">
-                    <button class="btn btn-secondary">Anterior</button>
-                    <button class="btn btn-secondary">Siguiente</button>
+                    <button class="btn btn-secondary" id="prevPageBtn">Anterior</button>
+                    <button class="btn btn-secondary" id="nextPageBtn">Siguiente</button>
                 </div>
             </div>
         </div>

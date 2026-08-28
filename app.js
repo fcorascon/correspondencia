@@ -6,9 +6,14 @@
     let currentSection = 'recibida';
     let currentEditId = null;
     let allData = [];
+    let currentFilteredData = [];
     let autorizadosData = []; // Para el select de Recibió / Elaboró
     let statusesData = []; // Para el select de Estatus
     let tiposData = []; // Para el select de Tipo
+
+    let currentPage = 1;
+    const pageSize = 20;
+    let currentFilter = 'todos';
 
     const schemas = {
         recibida: [
@@ -20,7 +25,7 @@
             { id: 'HORA', name: 'HORA', type: 'time' },
             { id: 'Lugar', name: 'LUGAR', type: 'text', full: true },
             { id: 'TELEFONO', name: 'TELÉFONO', type: 'text' },
-            { id: 'CORREO', name: 'CORREO', type: 'text' },
+            { id: 'CORREO', name: 'CORREO', type: 'email' },
             { id: 'PDF-Imagen', name: 'ARCHIVO/PDF', type: 'file' }
         ],
         despachada: [
@@ -32,11 +37,10 @@
             { id: 'Recibió', name: 'RECIBIÓ', type: 'text' },
             { id: 'Fecha_recepcion', name: 'FECHA RECEPCIÓN', type: 'date' },
             { id: 'TELEFONO', name: 'TELÉFONO', type: 'text' },
-            { id: 'CORREO', name: 'CORREO', type: 'text' },
+            { id: 'CORREO', name: 'CORREO', type: 'email' },
             { id: 'Archivos y multimedia', name: 'ARCHIVOS', type: 'file' }
         ],
         iniciativas: [
-            { id: 'id', name: 'ID', type: 'text', readonly: true },
             { id: 'fecha_oficio', name: 'FECHA OFICIO', type: 'date' },
             { id: 'fecha_presentacion_oficialia', name: 'OFICIALÍA', type: 'date' },
             { id: 'texto', name: 'INICIATIVA', type: 'text', full: true },
@@ -52,7 +56,6 @@
             { id: 'proyecto_decreto', name: 'PROYECTO DECRETO', type: 'file', maxFiles: 5 }
         ],
         proposiciones: [
-            { id: 'id', name: 'ID', type: 'text', readonly: true },
             { id: 'fecha_ingreso_procepar', name: 'INGRESO PROCEPAR', type: 'date' },
             { id: 'fecha_pleno', name: 'FECHA PLENO', type: 'date' },
             { id: 'proposicion', name: 'PROPOSICIÓN', type: 'text', full: true },
@@ -66,8 +69,95 @@
             { id: 'respuesta_acuerdo', name: 'RESPUESTA ACUERDO', type: 'file' },
             { id: 'anotaciones', name: 'ANOTACIONES', type: 'text', full: true },
             { id: 'pdf_foto', name: 'ARCHIVO', type: 'file' }
+        ],
+        fiscalizacion: [
+            { id: 'ano', name: 'AÑO', type: 'select', options: ['2024', '2025', '2026', '2027', '2028', '2029', '2030'] },
+            { id: 'fecha_sesion', name: 'FECHA SESIÓN', type: 'date' },
+            { id: 'dictamen_no', name: 'NO. DICTAMEN', type: 'text' },
+            { id: 'dependencia', name: 'DEPENDENCIA / ORGANISMO', type: 'text', full: true },
+            { id: 'observaciones', name: 'OBSERVACIONES', type: 'textarea', full: true },
+            { id: 'dictamen', name: 'DICTAMEN', type: 'textarea', full: true },
+            { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA'] },
+            { id: 'voto_final', name: 'VOTO FINAL', type: 'text' },
+            { id: 'fallo', name: 'FALLO', type: 'text' }
         ]
     };
+
+    function escapeHTML(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function getItemValue(item, key) {
+        if (!item) return '';
+        if (item[key] !== undefined && item[key] !== null) return item[key];
+        const upperKey = key.toUpperCase();
+        if (item[upperKey] !== undefined && item[upperKey] !== null) return item[upperKey];
+        const lowerKey = key.toLowerCase();
+        if (item[lowerKey] !== undefined && item[lowerKey] !== null) return item[lowerKey];
+
+        const aliases = {
+            'ano': ['ano', 'AÑO', 'año', 'ejercicio', 'ANIO'],
+            'fecha_sesion': ['fecha_sesion', 'FECHA_SESION', 'fecha', 'FECHA'],
+            'dictamen_no': ['dictamen_no', 'DICTAMEN_NO', 'no_dictamen', 'NO_DICTAMEN', 'num_dictamen', 'numero_dictamen', 'num_dict'],
+            'dependencia': ['dependencia', 'DEPENDENCIA', 'organismo', 'ORGANISMO', 'ente', 'ENTE'],
+            'observaciones': ['observaciones', 'OBSERVACIONES', 'recomendaciones', 'RECOMENDACIONES'],
+            'dictamen': ['dictamen', 'DICTAMEN', 'texto_dictamen', 'TEXTO_DICTAMEN', 'sentido', 'SENTIDO', 'resolucion', 'RESOLUCION'],
+            'voto_diputada': ['voto_diputada', 'VOTO-DIPUTADA', 'voto-diputada', 'VOTO_DIPUTADA', 'voto', 'VOTO'],
+            'voto_final': ['voto_final', 'VOTO_FINAL', 'VOTO-FINAL', 'voto-final', 'sentido_final'],
+            'fallo': ['fallo', 'FALLO', 'resultado', 'RESULTADO'],
+            'pdf': ['pdf', 'PDF', 'archivo', 'ARCHIVO', 'archivos', 'ARCHIVOS', 'PDF-Imagen']
+        };
+
+        if (aliases[key]) {
+            for (let alt of aliases[key]) {
+                if (item[alt] !== undefined && item[alt] !== null) return item[alt];
+            }
+        }
+        return '';
+    }
+
+    function parseDate(str) {
+        if (!str) return null;
+        str = String(str).trim();
+        if (/^\d{4}$/.test(str)) {
+            return new Date(parseInt(str, 10), 0, 1);
+        }
+        if (str.includes('/')) {
+            const parts = str.split('/');
+            if (parts.length === 3) {
+                const d = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10) - 1;
+                const y = parseInt(parts[2], 10);
+                const dt = new Date(y, m, d);
+                return isNaN(dt.getTime()) ? null : dt;
+            }
+        } else if (str.includes('-')) {
+            const parts = str.split('T')[0].split('-');
+            if (parts.length === 3) {
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10) - 1;
+                const d = parseInt(parts[2], 10);
+                const dt = new Date(y, m, d);
+                return isNaN(dt.getTime()) ? null : dt;
+            }
+        }
+        const dt = new Date(str);
+        return isNaN(dt.getTime()) ? null : dt;
+    }
+
+    function formatDateToYMD(date) {
+        if (!date || isNaN(date.getTime())) return '';
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
 
     function initSupabase() {
         if (typeof supabase === 'undefined') return false;
@@ -150,14 +240,20 @@
         ]);
     }
 
+    function getTableName(section) {
+        if (section === 'fiscalizacion') return 'fisca';
+        return section;
+    }
+
     async function loadData() {
         const grid = document.getElementById('dataGrid');
         if (grid) grid.innerHTML = '<div style="text-align: center; padding: 4rem;"><i class="bi bi-arrow-repeat spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 1rem; color: var(--text-muted);">Cargando registros...</p></div>';
 
         if (!_supabase && !initSupabase()) return;
 
+        const tableName = getTableName(currentSection);
         let query = _supabase
-            .from(currentSection)
+            .from(tableName)
             .select('*')
             .order('id', { ascending: false });
 
@@ -165,26 +261,19 @@
 
         if (error) {
             console.error('Error:', error);
-            if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso: ${error.message}</div>`;
+            if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso a "${escapeHTML(currentSection)}": ${escapeHTML(error.message)}</div>`;
             return;
         }
 
         allData = data || [];
 
-        if (currentSection === 'recibida' || currentSection === 'despachada') {
-            const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : 'Fecha';
+        if (currentSection === 'recibida' || currentSection === 'despachada' || currentSection === 'fiscalizacion') {
+            const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : (currentSection === 'despachada' ? 'Fecha' : 'fecha_sesion');
             allData.sort((a, b) => {
-                function parseDateStr(str) {
-                    if (!str) return 0;
-                    if (str.includes('/')) {
-                        const parts = str.split('/');
-                        if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
-                    }
-                    return new Date(str).getTime() || 0;
-                }
-                const dateA = parseDateStr(a[dateField]);
-                const dateB = parseDateStr(b[dateField]);
-                // If dates are equal, sort by ID descending as fallback
+                const rawDateA = getItemValue(a, dateField) || getItemValue(a, 'ano');
+                const rawDateB = getItemValue(b, dateField) || getItemValue(b, 'ano');
+                const dateA = parseDate(rawDateA)?.getTime() || 0;
+                const dateB = parseDate(rawDateB)?.getTime() || 0;
                 if (dateB === dateA) {
                     return (b.id || 0) - (a.id || 0);
                 }
@@ -193,7 +282,8 @@
         }
 
         updateStats(allData);
-        applyFiltersAndRender();
+        currentPage = 1;
+        applyFiltersAndRender(true);
     }
 
     function updateStats(data) {
@@ -213,26 +303,14 @@
         else if (currentSection === 'despachada') dateField = 'Fecha';
         else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
         else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+        else if (currentSection === 'fiscalizacion') dateField = 'fecha_sesion';
 
         data.forEach(item => {
             // Este Mes logic
-            const dateStr = item[dateField];
+            const dateStr = getItemValue(item, dateField);
             if (dateStr) {
-                let m = -1, y = -1;
-                if (dateStr.includes('/')) {
-                    const parts = dateStr.split('/');
-                    if (parts.length === 3) {
-                        m = parseInt(parts[1], 10) - 1;
-                        y = parseInt(parts[2], 10);
-                    }
-                } else if (dateStr.includes('-')) {
-                    const parts = dateStr.split('-');
-                    if (parts.length >= 3) {
-                        y = parseInt(parts[0], 10);
-                        m = parseInt(parts[1], 10) - 1;
-                    }
-                }
-                if (m === currentMonth && y === currentYear) {
+                const dt = parseDate(dateStr);
+                if (dt && dt.getMonth() === currentMonth && dt.getFullYear() === currentYear) {
                     thisMonthCount++;
                 }
             }
@@ -241,15 +319,16 @@
             let isPendiente = false;
             let isUrgente = false;
 
-            if (item.Estatus) {
-                const estatus = String(item.Estatus).toLowerCase();
-                if (estatus.includes('pendiente')) isPendiente = true;
+            const estatusVal = getItemValue(item, 'Estatus') || getItemValue(item, 'fallo') || '';
+            if (estatusVal) {
+                const estatus = String(estatusVal).toLowerCase();
+                if (estatus.includes('pendiente') || estatus.includes('en contra') || estatus.includes('observaciones')) isPendiente = true;
                 if (estatus.includes('urgente')) isUrgente = true;
             }
 
             if (!isPendiente || !isUrgente) {
                 const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
-                if (!isPendiente && allValues.includes('pendiente')) isPendiente = true;
+                if (!isPendiente && (allValues.includes('pendiente') || allValues.includes('en contra'))) isPendiente = true;
                 if (!isUrgente && allValues.includes('urgente')) isUrgente = true;
             }
 
@@ -263,18 +342,25 @@
         if (stats.length >= 4) stats[3].innerText = urgentesCount.toLocaleString();
     }
 
-    function renderFileLinks(val, label = 'Ver') {
+    function renderFileLinks(val) {
         if (!val) return '-';
+        let urls = [];
         try {
-            const urls = JSON.parse(val);
-            if (Array.isArray(urls)) {
-                return urls.map((url, i) => `<a href="${url}" target="_blank" class="file-link" title="Archivo ${i + 1}"><i class="bi bi-file-earmark-arrow-down"></i>${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ');
-            }
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed)) urls = parsed;
+            else if (typeof parsed === 'string') urls = [parsed];
         } catch (e) {
-            // No es JSON, asumimos link único
-            return `<a href="${val}" target="_blank" class="file-link"><i class="bi bi-file-earmark-arrow-down"></i></a>`;
+            urls = [val];
         }
-        return '-';
+
+        const validLinks = urls
+            .filter(url => typeof url === 'string' && url.trim() !== '')
+            .map((url, i) => {
+                const safeUrl = encodeURI(url.trim());
+                return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-link" title="Archivo ${i + 1}"><i class="bi bi-file-earmark-arrow-down"></i>${urls.length > 1 ? (i + 1) : ''}</a>`;
+            });
+
+        return validLinks.length > 0 ? validLinks.join(' ') : '-';
     }
 
     async function uploadFiles(files, limit = 10) {
@@ -301,166 +387,267 @@
         return JSON.stringify(urls);
     }
 
-    function renderGrid(data) {
+    function renderGrid() {
         const grid = document.getElementById('dataGrid');
         if (!grid) return;
         grid.innerHTML = '';
 
-        if (data.length === 0) {
+        const totalItems = currentFilteredData.length;
+        const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        // Actualizar controles de paginación
+        const pageInfo = document.getElementById('pageInfo');
+        if (pageInfo) {
+            pageInfo.innerText = totalItems > 0 
+                ? `Página ${currentPage} de ${totalPages} (${totalItems} registros)` 
+                : '0 registros';
+        }
+
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        if (prevBtn) prevBtn.disabled = (currentPage <= 1);
+        if (nextBtn) nextBtn.disabled = (currentPage >= totalPages);
+
+        if (totalItems === 0) {
             grid.innerHTML = '<div style="text-align: center; padding: 4rem; color: var(--text-muted);"><i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>No se encontraron registros.</div>';
             return;
         }
+
+        const startIndex = (currentPage - 1) * pageSize;
+        const pageData = currentFilteredData.slice(startIndex, startIndex + pageSize);
 
         const table = document.createElement('table');
         table.className = 'data-table';
 
         // Table Header
         let headerHtml = '<thead><tr>';
-        headerHtml += '<th>Acciones</th>';
-        headerHtml += '<th>Registro / Asunto</th>';
-        headerHtml += `<th>${currentSection === 'recibida' ? 'RECIBIÓ' : 'Detalle Principal'}</th>`;
-        headerHtml += '<th>Estado / Meta</th>';
-        headerHtml += '<th>Archivo</th>';
+        if (currentSection === 'fiscalizacion') {
+            headerHtml += '<th style="width: 100px;">Acciones</th>';
+            headerHtml += '<th style="width: 80px;">Año</th>';
+            headerHtml += '<th style="width: 120px;">No. Dictamen</th>';
+            headerHtml += '<th style="width: 130px;">Fecha Sesión</th>';
+            headerHtml += '<th>Dependencia</th>';
+            headerHtml += '<th style="width: 130px;">Voto Diputada</th>';
+            headerHtml += '<th>Fallo</th>';
+            headerHtml += '<th style="width: 130px;">Voto Final</th>';
+        } else {
+            headerHtml += '<th style="width: 110px;">Acciones</th>';
+            headerHtml += '<th>Registro / Asunto</th>';
+            headerHtml += `<th>${currentSection === 'recibida' ? 'RECIBIÓ' : 'Detalle Principal'}</th>`;
+            headerHtml += '<th>Estado / Meta</th>';
+            headerHtml += '<th>Archivo</th>';
+        }
         headerHtml += '</tr></thead>';
         table.innerHTML = headerHtml;
 
         const tbody = document.createElement('tbody');
-        data.forEach(item => {
+        pageData.forEach(item => {
             const tr = document.createElement('tr');
             const rowId = item.id;
 
-            let titleVal = '';
-            let subtitleVal = '';
-            let detailVal = '';
-            let metaHtml = '';
-            let fileHtml = '';
+            if (currentSection === 'fiscalizacion') {
+                const ano = getItemValue(item, 'ano') || '2024';
+                const dictamenNo = getItemValue(item, 'dictamen_no') || '—';
+                const fechaSesion = getItemValue(item, 'fecha_sesion') || '—';
+                const dependencia = getItemValue(item, 'dependencia') || 'Sin Dependencia';
+                const fallo = getItemValue(item, 'fallo') || '—';
+                
+                let votoDiputada = getItemValue(item, 'voto_diputada');
+                if (!votoDiputada && fallo) {
+                    if (fallo.toUpperCase().includes('A FAVOR')) votoDiputada = 'A FAVOR';
+                    else if (fallo.toUpperCase().includes('EN CONTRA')) votoDiputada = 'EN CONTRA';
+                }
+                if (!votoDiputada) votoDiputada = '—';
 
-            if (currentSection === 'recibida') {
-                titleVal = item.Remite;
-                subtitleVal = item.Asunto;
-                detailVal = item.Recibio || 'N/A';
-                metaHtml = `<span class="badge badge-success">${item.Fecha_Recibido || 'FECHA'}</span>`;
-                fileHtml = renderFileLinks(item['PDF-Imagen']);
-            }
-            else if (currentSection === 'despachada') {
-                titleVal = item.Dirigido;
-                subtitleVal = item.Asunto;
-                detailVal = item.Elaboro || 'N/A';
-                metaHtml = `<span class="badge badge-info">${item.Estatus || 'ENVIADO'}</span>`;
-                fileHtml = renderFileLinks(item['Archivos y multimedia']);
-            }
-            else if (currentSection === 'iniciativas') {
-                titleVal = `Iniciativa #${item.id || ''}`;
-                subtitleVal = item.texto || item.INICIATIVA;
-                detailVal = item.comision || 'SIN COMISIÓN';
-                metaHtml = `<span class="badge badge-warning">${item.fecha_oficio || 'OFICIO'}</span>`;
-                const inicFileFields = [
-                    ['pdf', 'PDF'],
-                    ['opinion_consultoria', 'OP. CONSULTORÍA'],
-                    ['proyecto_dictamen', 'PROY. DICTAMEN'],
-                    ['proyecto_decreto', 'PROY. DECRETO']
-                ];
-                const inicFiles = inicFileFields
-                    .map(([f, label]) => {
-                        const links = renderFileLinks(item[f]);
-                        const content = (links && links !== '-') ? links : '<span style="color:var(--text-muted)">—</span>';
-                        return `<span class="inic-file"><small>${label}</small> ${content}</span>`;
-                    })
-                    .join(' ');
-                fileHtml = inicFiles;
-            }
-            else if (currentSection === 'proposiciones') {
-                titleVal = `Proposición #${item.id || ''}`;
-                subtitleVal = item.proposicion;
-                detailVal = item.tipo || 'N/A';
-                metaHtml = `<span class="badge badge-info">${item.fecha_pleno || 'PLENO'}</span>`;
-                fileHtml = renderFileLinks(item.pdf_foto);
-            }
+                let votoFinal = getItemValue(item, 'voto_final');
+                if (!votoFinal && fallo) {
+                    if (fallo.toUpperCase().includes('A FAVOR')) votoFinal = 'A FAVOR';
+                    else if (fallo.toUpperCase().includes('EN CONTRA')) votoFinal = 'EN CONTRA';
+                }
+                if (!votoFinal) votoFinal = votoDiputada;
 
-            tr.innerHTML = `
-                <td class="action-cell" style="text-align: left; white-space: nowrap;">
-                    <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})"></i>
-                    <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})"></i>
-                    <i class="bi bi-trash action-icon" style="color: #D92D20;" onclick="deleteEntry(${rowId})"></i>
-                </td>
-                <td>
-                    <div class="row-item">
-                        <div class="avatar">${(titleVal || '?')[0].toUpperCase()}</div>
-                        <div class="item-main">
-                            <span class="item-title">${titleVal || 'Sin Título'}</span>
-                            <span class="item-subtitle">${subtitleVal || 'Sin descripción'}</span>
+                const getBadge = (val) => {
+                    const v = String(val).toUpperCase();
+                    if (v.includes('FAVOR')) return `<span class="badge badge-success">${escapeHTML(val)}</span>`;
+                    if (v.includes('CONTRA')) return `<span class="badge" style="background:#FEF3F2; color:#B42318;">${escapeHTML(val)}</span>`;
+                    if (v.includes('ABST')) return `<span class="badge badge-warning">${escapeHTML(val)}</span>`;
+                    return `<span style="color: var(--text-muted);">${escapeHTML(val)}</span>`;
+                };
+
+                const initialLetter = escapeHTML((dependencia || '?')[0].toUpperCase());
+
+                tr.innerHTML = `
+                    <td class="action-cell" style="text-align: left; white-space: nowrap;">
+                        <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
+                        <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
+                        <i class="bi bi-trash action-icon" style="color: #D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                    </td>
+                    <td><span class="badge badge-info" style="font-weight: 600;">${escapeHTML(String(ano))}</span></td>
+                    <td><span style="font-weight: 600; color: var(--primary);">${escapeHTML(dictamenNo)}</span></td>
+                    <td><span style="color: var(--text-muted); font-size: 0.875rem;">${escapeHTML(fechaSesion)}</span></td>
+                    <td>
+                        <div class="row-item">
+                            <div class="avatar">${initialLetter}</div>
+                            <div class="item-main">
+                                <span class="item-title" style="font-size: 0.875rem;">${escapeHTML(dependencia)}</span>
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td>
-                    <span class="item-subtitle">${detailVal}</span>
-                </td>
-                <td>
-                    ${metaHtml}
-                </td>
-                <td>
-                    ${fileHtml}
-                </td>
-            `;
+                    </td>
+                    <td>${getBadge(votoDiputada)}</td>
+                    <td><span style="font-size: 0.875rem; font-weight: 500;">${escapeHTML(fallo)}</span></td>
+                    <td>${getBadge(votoFinal)}</td>
+                `;
+            } else {
+                let titleVal = '';
+                let subtitleVal = '';
+                let detailVal = '';
+                let metaHtml = '';
+                let fileHtml = '';
+
+                if (currentSection === 'recibida') {
+                    titleVal = getItemValue(item, 'Remite');
+                    subtitleVal = getItemValue(item, 'Asunto');
+                    detailVal = getItemValue(item, 'Recibio') || 'N/A';
+                    metaHtml = `<span class="badge badge-success">${escapeHTML(getItemValue(item, 'Fecha_Recibido') || 'FECHA')}</span>`;
+                    fileHtml = renderFileLinks(getItemValue(item, 'PDF-Imagen'));
+                }
+                else if (currentSection === 'despachada') {
+                    titleVal = getItemValue(item, 'Dirigido');
+                    subtitleVal = getItemValue(item, 'Asunto');
+                    detailVal = getItemValue(item, 'Elaboro') || 'N/A';
+                    metaHtml = `<span class="badge badge-info">${escapeHTML(getItemValue(item, 'Estatus') || 'ENVIADO')}</span>`;
+                    fileHtml = renderFileLinks(getItemValue(item, 'Archivos y multimedia'));
+                }
+                else if (currentSection === 'iniciativas') {
+                    titleVal = `Iniciativa #${item.id || ''}`;
+                    subtitleVal = getItemValue(item, 'texto') || getItemValue(item, 'INICIATIVA');
+                    detailVal = getItemValue(item, 'comision') || 'SIN COMISIÓN';
+                    metaHtml = `<span class="badge badge-warning">${escapeHTML(getItemValue(item, 'fecha_oficio') || 'OFICIO')}</span>`;
+                    const inicFileFields = [
+                        ['pdf', 'PDF'],
+                        ['opinion_consultoria', 'OP. CONSULTORÍA'],
+                        ['proyecto_dictamen', 'PROY. DICTAMEN'],
+                        ['proyecto_decreto', 'PROY. DECRETO']
+                    ];
+                    const inicFiles = inicFileFields
+                        .map(([f, label]) => {
+                            const links = renderFileLinks(getItemValue(item, f));
+                            const content = (links && links !== '-') ? links : '<span style="color:var(--text-muted)">—</span>';
+                            return `<span class="inic-file"><small>${escapeHTML(label)}</small> ${content}</span>`;
+                        })
+                        .join(' ');
+                    fileHtml = inicFiles;
+                }
+                else if (currentSection === 'proposiciones') {
+                    titleVal = `Proposición #${item.id || ''}`;
+                    subtitleVal = getItemValue(item, 'proposicion');
+                    detailVal = getItemValue(item, 'tipo') || 'N/A';
+                    metaHtml = `<span class="badge badge-info">${escapeHTML(getItemValue(item, 'fecha_pleno') || 'PLENO')}</span>`;
+                    fileHtml = renderFileLinks(getItemValue(item, 'pdf_foto'));
+                }
+
+                const initialLetter = escapeHTML((titleVal || '?')[0].toUpperCase());
+
+                tr.innerHTML = `
+                    <td class="action-cell" style="text-align: left; white-space: nowrap;">
+                        <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
+                        <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
+                        <i class="bi bi-trash action-icon" style="color: #D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                    </td>
+                    <td>
+                        <div class="row-item">
+                            <div class="avatar">${initialLetter}</div>
+                            <div class="item-main">
+                                <span class="item-title">${escapeHTML(titleVal || 'Sin Título')}</span>
+                                <span class="item-subtitle">${escapeHTML(subtitleVal || 'Sin descripción')}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="item-subtitle">${escapeHTML(detailVal)}</span>
+                    </td>
+                    <td>
+                        ${metaHtml}
+                    </td>
+                    <td>
+                        ${fileHtml}
+                    </td>
+                `;
+            }
+
             tbody.appendChild(tr);
         });
 
         table.appendChild(tbody);
         grid.appendChild(table);
-
-        // Update page info
-        document.querySelector('.page-info').innerText = `Mostrando ${data.length} registros`;
     }
 
-    let currentFilter = 'todos';
-
-    function applyFiltersAndRender() {
+    function applyFiltersAndRender(resetPage = false) {
         let filtered = allData;
 
         const searchInput = document.getElementById('searchInput');
-        if (searchInput && searchInput.value) {
-            const term = searchInput.value.toLowerCase();
+        const tableSearchInput = document.getElementById('tableSearchInput');
+        const term = (searchInput?.value || tableSearchInput?.value || '').toLowerCase().trim();
+
+        if (term) {
             filtered = filtered.filter(item => {
                 return Object.values(item).some(val => String(val).toLowerCase().includes(term));
             });
         }
 
+        const yearFilter = document.getElementById('yearFilter');
+        if (yearFilter && yearFilter.value) {
+            const y = String(yearFilter.value).trim();
+            filtered = filtered.filter(item => {
+                const itemYear = String(getItemValue(item, 'ano') || getItemValue(item, 'fecha_sesion') || getItemValue(item, 'fecha') || getItemValue(item, 'Fecha_Recibido') || '');
+                return itemYear.includes(y);
+            });
+        }
+
         if (currentFilter === 'recientes') {
-            const now = new Date();
-            const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             
             let dateField = '';
             if (currentSection === 'recibida') dateField = 'Fecha_Recibido';
             else if (currentSection === 'despachada') dateField = 'Fecha';
             else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
             else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+            else if (currentSection === 'fiscalizacion') dateField = 'fecha_sesion';
 
             filtered = filtered.filter(item => {
-                const dateStr = item[dateField];
+                const dateStr = getItemValue(item, dateField) || getItemValue(item, 'ano');
                 if (!dateStr) return false;
-                let itemDate;
-                if (dateStr.includes('/')) {
-                    const parts = dateStr.split('/');
-                    if (parts.length === 3) itemDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                } else {
-                    itemDate = new Date(dateStr);
-                }
-                return itemDate && !isNaN(itemDate.getTime()) && itemDate >= thirtyDaysAgo;
+                const itemDate = parseDate(dateStr);
+                return itemDate && itemDate >= thirtyDaysAgo;
             });
         } else if (currentFilter === 'archivados') {
             filtered = filtered.filter(item => {
                 const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
-                return allValues.includes('archivado') || allValues.includes('concluido') || allValues.includes('atendido') || allValues.includes('entregada');
+                return allValues.includes('archivado') || allValues.includes('concluido') || allValues.includes('atendido') || allValues.includes('entregada') || allValues.includes('a favor');
             });
         }
 
-        renderGrid(filtered);
+        currentFilteredData = filtered;
+        if (resetPage) currentPage = 1;
+        renderGrid();
     }
 
     function switchSection(section) {
         currentSection = section;
         const titleElem = document.getElementById('sectionTitle');
-        if (titleElem) titleElem.innerText = section.charAt(0).toUpperCase() + section.slice(1);
+        if (titleElem) {
+            const sectionLabels = {
+                'recibida': 'Recibida',
+                'despachada': 'Despachada',
+                'iniciativas': 'Iniciativas',
+                'proposiciones': 'Proposiciones',
+                'fiscalizacion': 'Fiscalización'
+            };
+            titleElem.innerText = sectionLabels[section] || (section.charAt(0).toUpperCase() + section.slice(1));
+        }
 
         document.querySelectorAll('.nav-item').forEach(item => {
             item.classList.remove('active');
@@ -474,6 +661,10 @@
 
         const searchInput = document.getElementById('searchInput');
         if (searchInput) searchInput.value = '';
+        const tableSearchInput = document.getElementById('tableSearchInput');
+        if (tableSearchInput) tableSearchInput.value = '';
+        const yearFilter = document.getElementById('yearFilter');
+        if (yearFilter) yearFilter.value = '';
 
         loadData();
     }
@@ -484,12 +675,15 @@
 
         let details = '';
         schemas[currentSection].forEach(field => {
-            const val = item[field.id];
+            const val = getItemValue(item, field.id);
+            const content = field.type === 'file' 
+                ? renderFileLinks(val) 
+                : escapeHTML(val || 'N/A');
             details += `
                 <div class="form-group ${field.full ? 'full' : ''}">
-                    <label>${field.name}</label>
-                    <div style="padding: 0.625rem; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem;">
-                        ${field.type === 'file' ? renderFileLinks(val) : (val || 'N/A')}
+                    <label>${escapeHTML(field.name)}</label>
+                    <div style="padding: 0.625rem; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; word-break: break-word; white-space: pre-wrap;">
+                        ${content}
                     </div>
                 </div>
             `;
@@ -514,7 +708,8 @@
 
     window.deleteEntry = async function (id) {
         if (!confirm('¿Estás seguro de que deseas borrar este registro?')) return;
-        const { error } = await _supabase.from(currentSection).delete().eq('id', id);
+        const tableName = getTableName(currentSection);
+        const { error } = await _supabase.from(tableName).delete().eq('id', id);
         if (error) alert('Error al borrar: ' + error.message);
         else loadData();
     };
@@ -535,38 +730,47 @@
         schemas[currentSection].forEach(field => {
             const div = document.createElement('div');
             div.className = `form-group ${field.full ? 'full' : ''}`;
-            const value = isEdit ? (item[field.id] || '') : '';
+            const rawValue = isEdit ? getItemValue(item, field.id) : '';
+            const safeValue = escapeHTML(rawValue);
 
             if (field.type === 'file') {
                 const maxFiles = field.maxFiles || 10;
                 div.innerHTML = `
-                    <label>${field.name}</label>
+                    <label>${escapeHTML(field.name)}</label>
                     <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;alert('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.');}">
-                    ${isEdit && value ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos: ${renderFileLinks(value)}</small>` : ''}
-                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (pdf, jpeg, png, etc.).</small>
+                    ${isEdit && rawValue ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos actuales: ${renderFileLinks(rawValue)}</small>` : ''}
+                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</small>
                 `;
             } else if (field.type === 'select') {
-                const valTarget = String(value || '').toUpperCase().trim();
-                let sourceData = autorizadosData;
-                if (field.source === 'status') sourceData = statusesData;
-                else if (field.source === 'tipo') sourceData = tiposData;
-
-                console.log(`Campo: ${field.id}, Fuente: ${field.source}, Buscando match para: "${valTarget}"`);
+                const valTarget = String(rawValue || '').toUpperCase().trim();
+                let sourceData = [];
+                if (field.options && Array.isArray(field.options)) {
+                    sourceData = field.options;
+                } else if (field.source === 'status') {
+                    sourceData = statusesData;
+                } else if (field.source === 'tipo') {
+                    sourceData = tiposData;
+                } else {
+                    sourceData = autorizadosData;
+                }
 
                 const options = sourceData.map(opt => {
-                    const isSelected = (valTarget === opt);
-                    return `<option value="${opt}" ${isSelected ? 'selected' : ''}>${opt}</option>`;
+                    const optUpper = String(opt).toUpperCase().trim();
+                    const isSelected = (valTarget === optUpper) || 
+                                       (valTarget.includes('FAVOR') && optUpper.includes('FAVOR')) ||
+                                       (valTarget.includes('CONTRA') && optUpper.includes('CONTRA'));
+                    return `<option value="${escapeHTML(opt)}" ${isSelected ? 'selected' : ''}>${escapeHTML(opt)}</option>`;
                 }).join('');
 
                 div.innerHTML = `
-                    <label>${field.name}</label>
+                    <label>${escapeHTML(field.name)}</label>
                     <select name="${field.id}">
-                        <option value="">${sourceData.length === 0 ? 'CARGANDO LISTA...' : 'SELECCIONE...'}</option>
+                        <option value="">${(!field.options && sourceData.length === 0) ? 'CARGANDO LISTA...' : 'SELECCIONE...'}</option>
                         ${options}
                     </select>
                 `;
 
-                if (sourceData.length === 0) {
+                if (!field.options && sourceData.length === 0) {
                     let fetchMethod = fetchAutorizados;
                     if (field.source === 'status') fetchMethod = fetchStatuses;
                     else if (field.source === 'tipo') fetchMethod = fetchTipos;
@@ -580,21 +784,26 @@
                             const select = div.querySelector('select');
                             if (select) {
                                 select.innerHTML = `<option value="">SELECCIONE...</option>` +
-                                    currentData.map(opt => `<option value="${opt}" ${valTarget === opt ? 'selected' : ''}>${opt}</option>`).join('');
+                                    currentData.map(opt => `<option value="${escapeHTML(opt)}" ${valTarget === opt ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('');
                             }
                         }
                     });
                 }
+            } else if (field.type === 'textarea') {
+                div.innerHTML = `
+                    <label>${escapeHTML(field.name)}</label>
+                    <textarea name="${field.id}" placeholder="Ingresa ${escapeHTML(field.name.toLowerCase())}">${safeValue}</textarea>
+                `;
             } else if (field.type === 'date' || field.type === 'time') {
                 div.innerHTML = `
-                    <label>${field.name}</label>
-                    <input type="${field.type}" name="${field.id}" value="${value || ''}">
+                    <label>${escapeHTML(field.name)}</label>
+                    <input type="${field.type}" name="${field.id}" value="${safeValue}">
                 `;
             } else {
                 div.innerHTML = `
-                    <label>${field.name}</label>
-                    <input type="${field.type}" name="${field.id}" value="${value}" 
-                           placeholder="${field.readonly ? 'ID autogenerado' : 'Ingresa ' + field.name.toLowerCase()}" 
+                    <label>${escapeHTML(field.name)}</label>
+                    <input type="${field.type === 'email' ? 'email' : 'text'}" name="${field.id}" value="${safeValue}" 
+                           placeholder="${field.readonly ? 'ID autogenerado' : 'Ingresa ' + escapeHTML(field.name.toLowerCase())}" 
                            ${field.readonly ? 'readonly' : ''}>
                 `;
             }
@@ -617,13 +826,9 @@
         }
 
         let selectedDateStr = document.getElementById('exportDate').value;
-
         if (!selectedDateStr) {
             const today = new Date();
-            const yyyy = today.getFullYear();
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const dd = String(today.getDate()).padStart(2, '0');
-            selectedDateStr = `${yyyy}-${mm}-${dd}`;
+            selectedDateStr = formatDateToYMD(today);
         }
 
         let dateField = '';
@@ -631,10 +836,17 @@
         else if (currentSection === 'despachada') dateField = 'Fecha';
         else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
         else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
+        else if (currentSection === 'fiscalizacion') dateField = 'fecha_sesion';
 
         const dailyData = allData.filter(item => {
-            const itemDate = item[dateField];
-            return itemDate && itemDate.startsWith(selectedDateStr);
+            const itemDateStr = getItemValue(item, dateField) || getItemValue(item, 'ano');
+            if (!itemDateStr) return false;
+            const parsed = parseDate(itemDateStr);
+            if (!parsed) {
+                // If it's just year comparison or text
+                return String(itemDateStr).includes(selectedDateStr) || String(itemDateStr) === selectedDateStr;
+            }
+            return formatDateToYMD(parsed) === selectedDateStr;
         });
 
         if (dailyData.length === 0) {
@@ -646,7 +858,7 @@
             const row = {};
             schemas[currentSection].forEach(field => {
                 if (field.type !== 'file') {
-                    row[field.name] = item[field.id];
+                    row[field.name] = getItemValue(item, field.id) || '';
                 }
             });
             return row;
@@ -673,20 +885,49 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         // Set default date for export
-        const todayForExport = new Date();
-        const exportYyyy = todayForExport.getFullYear();
-        const exportMm = String(todayForExport.getMonth() + 1).padStart(2, '0');
-        const exportDd = String(todayForExport.getDate()).padStart(2, '0');
         const dateInput = document.getElementById('exportDate');
         if (dateInput) {
-            dateInput.value = `${exportYyyy}-${exportMm}-${exportDd}`;
+            dateInput.value = formatDateToYMD(new Date());
         }
+
+        // Paginación
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        if (prevPageBtn) {
+            prevPageBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderGrid();
+                }
+            };
+        }
+
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        if (nextPageBtn) {
+            nextPageBtn.onclick = () => {
+                const totalPages = Math.ceil(currentFilteredData.length / pageSize) || 1;
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderGrid();
+                }
+            };
+        }
+
+        // Cerrar modal al dar click fuera o con Escape
+        const modalOverlay = document.getElementById('modalOverlay');
+        if (modalOverlay) {
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) window.closeModal();
+            });
+        }
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') window.closeModal();
+        });
 
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
             loginForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const user = document.getElementById('loginUser').value;
+                const user = document.getElementById('loginUser').value.trim();
                 const pass = document.getElementById('loginPass').value;
                 const errorMsg = document.getElementById('loginError');
 
@@ -717,20 +958,61 @@
             logoutBtn.onclick = () => {
                 if (confirm('¿CERRAR SESIÓN?')) {
                     localStorage.removeItem('loggedUser');
+                    localStorage.removeItem('loggedUserRole');
                     location.reload();
                 }
             };
         }
 
+        // Mobile Sidebar Controls
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        const sidebar = document.getElementById('sidebar');
+
+        function openMobileSidebar() {
+            if (sidebar) sidebar.classList.add('open');
+            if (sidebarBackdrop) sidebarBackdrop.classList.add('active');
+        }
+
+        function closeMobileSidebar() {
+            if (sidebar) sidebar.classList.remove('open');
+            if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+        }
+
+        if (menuToggle) menuToggle.onclick = openMobileSidebar;
+        if (sidebarCloseBtn) sidebarCloseBtn.onclick = closeMobileSidebar;
+        if (sidebarBackdrop) sidebarBackdrop.onclick = closeMobileSidebar;
+
         document.querySelectorAll('.nav-item').forEach(item => {
             if (item.dataset.section) {
-                item.onclick = function () { switchSection(this.dataset.section); };
+                item.onclick = function () {
+                    closeMobileSidebar();
+                    switchSection(this.dataset.section);
+                };
             }
         });
 
         const searchInput = document.getElementById('searchInput');
+        const tableSearchInput = document.getElementById('tableSearchInput');
+
         if (searchInput) {
-            searchInput.oninput = () => applyFiltersAndRender();
+            searchInput.oninput = (e) => {
+                if (tableSearchInput) tableSearchInput.value = e.target.value;
+                applyFiltersAndRender(true);
+            };
+        }
+
+        if (tableSearchInput) {
+            tableSearchInput.oninput = (e) => {
+                if (searchInput) searchInput.value = e.target.value;
+                applyFiltersAndRender(true);
+            };
+        }
+
+        const yearFilter = document.getElementById('yearFilter');
+        if (yearFilter) {
+            yearFilter.onchange = () => applyFiltersAndRender(true);
         }
 
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -743,12 +1025,25 @@
                 else if (text.includes('recientes')) currentFilter = 'recientes';
                 else if (text.includes('archivados')) currentFilter = 'archivados';
 
-                applyFiltersAndRender();
+                applyFiltersAndRender(true);
             };
         });
 
         const dataForm = document.getElementById('dataForm');
         if (dataForm) {
+            dataForm.addEventListener('input', (e) => {
+                const target = e.target;
+                const isText = (target.tagName === 'INPUT' && (!target.type || target.type === 'text')) || target.tagName === 'TEXTAREA';
+                if (isText) {
+                    const start = target.selectionStart;
+                    const end = target.selectionEnd;
+                    target.value = target.value.toUpperCase();
+                    if (start !== null && end !== null) {
+                        target.setSelectionRange(start, end);
+                    }
+                }
+            });
+
             dataForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const btn = e.target.querySelector('button[type="submit"]');
@@ -766,7 +1061,7 @@
 
                         const input = e.target.querySelector(`[name="${key}"]`);
 
-                         if (fieldDef.type === 'file') {
+                        if (fieldDef.type === 'file') {
                             const maxFiles = fieldDef.maxFiles || 10;
                             const files = input ? input.files : null;
                             if (files && files.length > 0) {
@@ -776,12 +1071,13 @@
                                     let existingUrls = [];
                                     if (currentEditId) {
                                         const existingItem = allData.find(d => d.id === currentEditId);
-                                        if (existingItem && existingItem[key]) {
+                                        const existingRaw = existingItem ? getItemValue(existingItem, key) : null;
+                                        if (existingRaw) {
                                             try {
-                                                existingUrls = JSON.parse(existingItem[key]);
-                                                if (!Array.isArray(existingUrls)) existingUrls = [existingItem[key]];
+                                                existingUrls = JSON.parse(existingRaw);
+                                                if (!Array.isArray(existingUrls)) existingUrls = [existingRaw];
                                             } catch (e) {
-                                                existingUrls = [existingItem[key]];
+                                                existingUrls = [existingRaw];
                                             }
                                         }
                                     }
@@ -790,21 +1086,32 @@
                                 }
                             } else if (currentEditId) {
                                 const existingItem = allData.find(d => d.id === currentEditId);
-                                if (existingItem && existingItem[key]) {
-                                    entry[key] = existingItem[key];
+                                const existingVal = existingItem ? getItemValue(existingItem, key) : null;
+                                if (existingVal) {
+                                    entry[key] = existingVal;
                                 }
                             }
                         } else {
                             const val = formData.get(key);
-                            entry[key] = typeof val === 'string' ? val.toUpperCase().trim() : val;
+                            if (typeof val === 'string') {
+                                const trimmed = val.trim();
+                                if (fieldDef.type === 'email' || key.toLowerCase().includes('correo')) {
+                                    entry[key] = trimmed.toLowerCase();
+                                } else {
+                                    entry[key] = trimmed.toUpperCase();
+                                }
+                            } else {
+                                entry[key] = val;
+                            }
                         }
                     }
 
                     if (!_supabase && !initSupabase()) return;
 
+                    const tableName = getTableName(currentSection);
                     let result;
-                    if (currentEditId) result = await _supabase.from(currentSection).update(entry).eq('id', currentEditId);
-                    else result = await _supabase.from(currentSection).insert([entry]);
+                    if (currentEditId) result = await _supabase.from(tableName).update(entry).eq('id', currentEditId);
+                    else result = await _supabase.from(tableName).insert([entry]);
 
                     if (result.error) alert('Error al guardar: ' + result.error.message);
                     else {
