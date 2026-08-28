@@ -77,7 +77,7 @@
             { id: 'dependencia', name: 'DEPENDENCIA / ORGANISMO', type: 'text', full: true },
             { id: 'observaciones', name: 'OBSERVACIONES', type: 'textarea', full: true },
             { id: 'dictamen', name: 'DICTAMEN', type: 'textarea', full: true },
-            { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA'] },
+            { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA', 'NO VOTO'] },
             { id: 'voto_final', name: 'VOTO FINAL', type: 'text' },
             { id: 'fallo', name: 'FALLO', type: 'text' }
         ]
@@ -473,6 +473,7 @@
                     const v = String(val).toUpperCase();
                     if (v.includes('FAVOR')) return `<span class="badge badge-success">${escapeHTML(val)}</span>`;
                     if (v.includes('CONTRA')) return `<span class="badge" style="background:#FEF3F2; color:#B42318;">${escapeHTML(val)}</span>`;
+                    if (v.includes('NO VOTO') || v === 'NO VOTO') return `<span class="badge" style="background:#F2F4F7; color:#667085;">${escapeHTML(val)}</span>`;
                     if (v.includes('ABST')) return `<span class="badge badge-warning">${escapeHTML(val)}</span>`;
                     return `<span style="color: var(--text-muted);">${escapeHTML(val)}</span>`;
                 };
