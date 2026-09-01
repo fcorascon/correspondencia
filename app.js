@@ -35,7 +35,7 @@
             { id: 'Dirigido', name: 'DIRIGIDO', type: 'text', required: true },
             { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true, required: true },
             { id: 'Estatus', name: 'ESTATUS', type: 'select', source: 'status' },
-            { id: 'Recibíó', name: 'RECIBIÓ', type: 'text' },
+            { id: 'Recibió', name: 'RECIBIÓ', type: 'text' },
             { id: 'Fecha_recepcion', name: 'FECHA RECEPCIÓN', type: 'date' },
             { id: 'TELEFONO', name: 'TELÉFONO', type: 'text' },
             { id: 'CORREO', name: 'CORREO', type: 'email' },
@@ -43,7 +43,7 @@
         ],
         iniciativas: [
             { id: 'fecha_oficio', name: 'FECHA OFICIO', type: 'date', required: true },
-            { id: 'fecha_presentacion_oficialia', name: 'OFICIALIÁ', type: 'date' },
+            { id: 'fecha_presentacion_oficialia', name: 'OFICIALÍA', type: 'date' },
             { id: 'texto', name: 'INICIATIVA', type: 'text', full: true, required: true },
             { id: 'comision', name: 'COMISIÓN', type: 'text' },
             { id: 'fecha_turno_legis', name: 'TURNO LEGIS', type: 'date' },
@@ -273,8 +273,18 @@
     }
 
     window.sortBy = function(field) {
-        sortField = (sortField === field && sortDir === 'desc') ? null : field;
-        if (sortField) sortDir = (sortField === field && sortDir === 'asc') ? 'desc' : 'asc';
+        if (sortField === field) {
+            // Same field: cycle asc → desc → unsorted
+            if (sortDir === 'desc') {
+                sortField = null;
+                sortDir = 'asc';
+            } else {
+                sortDir = 'desc';
+            }
+        } else {
+            sortField = field;
+            sortDir = 'asc';
+        }
         renderGrid();
     };
 
@@ -481,7 +491,7 @@
                 if (estatus.includes('urgente')) isUrgente = true;
             }
 
-            if (!isPendiente || !isUrgente) {
+            if (!isPendiente && !isUrgente) {
                 const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
                 if (!isPendiente && (allValues.includes('pendiente') || allValues.includes('en contra'))) isPendiente = true;
                 if (!isUrgente && allValues.includes('urgente')) isUrgente = true;
@@ -867,7 +877,7 @@
             details += `
                 <div class="form-group ${field.full ? 'full' : ''}">
                     <label>${escapeHTML(field.name)}</label>
-                    <div style="padding: 0.625rem; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; word-break: break-word; white-space: pre-wrap;">
+                    <div style="padding: 0.625rem; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; word-break: break-word; white-space: pre-wrap; text-align: left;">
                         ${content}
                     </div>
                 </div>
@@ -945,16 +955,54 @@
                 if (dt && !isNaN(dt.getTime())) {
                     dateValue = formatDateToYMD(dt);
                 } else {
-                    dateValue = rawValue; // dejar como está si no se puede parsear
+                    dateValue = rawValue; // dejar como está
                 }
             }
 
             if (field.type === 'file') {
                 const maxFiles = field.maxFiles || 10;
+
+                // Build deletable list of existing files (edit mode only)
+                let existingFilesHtml = '';
+                if (isEdit && rawValue) {
+                    let urls = [];
+                    try {
+                        const parsed = JSON.parse(rawValue);
+                        if (Array.isArray(parsed)) urls = parsed;
+                        else if (typeof parsed === 'string' && parsed.trim()) urls = [parsed.trim()];
+                    } catch (_) {
+                        if (rawValue.trim()) urls = [rawValue.trim()];
+                    }
+                    const validUrls = urls.filter(u => typeof u === 'string' && u.trim());
+                    if (validUrls.length > 0) {
+                        const fieldIdAttr = field.id.replace(/"/g, '&quot;');
+                        const items = validUrls.map((url, i) => {
+                            const raw = decodeURIComponent(url.split('/').pop().split('?')[0]);
+                            const displayName = raw.replace(/^\d+-[a-z0-9]+\./, '').substring(0, 45) || `Archivo ${i + 1}`;
+                            const safeUrl = encodeURI(url.trim());
+                            const safeAttrUrl = url.replace(/"/g, '&quot;');
+                            return `<div class="existing-file-item" data-url="${safeAttrUrl}">
+                                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-name-link" title="${escapeHTML(raw)}">
+                                    <i class="bi bi-file-earmark-arrow-down"></i>
+                                    ${escapeHTML(displayName)}
+                                </a>
+                                <button type="button" class="btn-remove-file" onclick="removeExistingFile(this)" title="Eliminar archivo">
+                                    <i class="bi bi-x-circle-fill"></i>
+                                </button>
+                            </div>`;
+                        }).join('');
+                        existingFilesHtml = `
+                            <div class="existing-files-container" data-field-id="${fieldIdAttr}">
+                                <span class="existing-files-label"><i class="bi bi-paperclip"></i> Archivos actuales &mdash; clic en × para eliminar</span>
+                                ${items}
+                            </div>`;
+                    }
+                }
+
                 div.innerHTML = `
                     <label>${escapeHTML(field.name)} ${reqStar}</label>
+                    ${existingFilesHtml}
                     <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;showToast('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.', 'warning');}">
-                    ${isEdit && rawValue ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos actuales: ${renderFileLinks(rawValue)}</small>` : ''}
                     <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</small>
                 `;
             } else if (field.type === 'select') {
@@ -1034,6 +1082,21 @@
         const overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.style.display = 'none';
         currentEditId = null;
+    };
+
+    // Remove an existing file row from the edit modal with a smooth animation
+    window.removeExistingFile = function (btn) {
+        const item = btn.closest('.existing-file-item');
+        if (!item) return;
+        item.classList.add('removing');
+        setTimeout(() => {
+            item.remove();
+            // Walk up to the specific container this file belonged to, not a global querySelector
+            const container = btn.closest('.existing-files-container');
+            if (container && container.querySelectorAll('.existing-file-item').length === 0) {
+                container.remove();
+            }
+        }, 220);
     };
 
     window.exportDailyExcel = function () {
@@ -1730,32 +1793,36 @@ function checkSession() {
                         if (fieldDef.type === 'file') {
                             const maxFiles = fieldDef.maxFiles || 10;
                             const files = input ? input.files : null;
+
+                            // Collect URLs still present in the DOM (user may have removed some)
+                            const escapedKey = key.replace(/"/g, '\\"');
+                            const container = e.target.querySelector(`.existing-files-container[data-field-id="${escapedKey}"]`);
+                            let keptUrls = [];
+                            if (container) {
+                                container.querySelectorAll('.existing-file-item[data-url]').forEach(item => {
+                                    const url = item.getAttribute('data-url');
+                                    if (url && url.trim()) keptUrls.push(url.trim());
+                                });
+                            }
+
                             if (files && files.length > 0) {
+                                // Upload new files then merge with kept ones
                                 const uploaded = await uploadFiles(files, maxFiles);
                                 if (uploaded) {
                                     const newUrls = JSON.parse(uploaded);
-                                    let existingUrls = [];
-                                    if (currentEditId) {
-                                        const existingItem = allData.find(d => d.id === currentEditId);
-                                        const existingRaw = existingItem ? getItemValue(existingItem, key) : null;
-                                        if (existingRaw) {
-                                            try {
-                                                existingUrls = JSON.parse(existingRaw);
-                                                if (!Array.isArray(existingUrls)) existingUrls = [existingRaw];
-                                            } catch (e) {
-                                                existingUrls = [existingRaw];
-                                            }
-                                        }
-                                    }
-                                    const combined = existingUrls.concat(newUrls).slice(0, maxFiles);
+                                    const combined = keptUrls.concat(newUrls).slice(0, maxFiles);
                                     entry[key] = JSON.stringify(combined);
+                                } else if (keptUrls.length > 0) {
+                                    entry[key] = JSON.stringify(keptUrls);
                                 }
+                            } else if (container) {
+                                // No new upload — save whatever the user kept (may be empty = all deleted)
+                                entry[key] = keptUrls.length > 0 ? JSON.stringify(keptUrls) : null;
                             } else if (currentEditId) {
+                                // No delete UI was rendered (no pre-existing files) — preserve original
                                 const existingItem = allData.find(d => d.id === currentEditId);
                                 const existingVal = existingItem ? getItemValue(existingItem, key) : null;
-                                if (existingVal) {
-                                    entry[key] = existingVal;
-                                }
+                                if (existingVal) entry[key] = existingVal;
                             }
                         } else {
                             const val = formData.get(key);

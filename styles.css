@@ -126,14 +126,21 @@ header {
     background: var(--header-bg);
     border-bottom: 1px solid var(--border);
     padding: 1rem 2rem;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: space-between;
+    gap: 1rem;
+}
+
+.header-center {
+    display: flex;
+    justify-content: center;
 }
 
 .search-container {
     position: relative;
-    width: 320px;
+    width: 100%;
+    max-width: 480px;
 }
 
 .search-container input {
@@ -760,7 +767,6 @@ input[type="file"]::file-selector-button {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    flex: 1;
 }
 
 .sidebar-backdrop {
@@ -800,6 +806,93 @@ input[type="file"]::file-selector-button {
 
 .file-link i {
     font-size: 1.25rem;
+}
+
+/* Existing files list in edit modal */
+.existing-files-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.625rem 0.75rem;
+    background: #F9FAFB;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.25rem;
+}
+
+.existing-files-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.25rem;
+}
+
+.existing-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    background: #FFFFFF;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.existing-file-item:hover {
+    border-color: #b9c2d8;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+}
+
+.existing-file-item .file-name-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--primary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+.existing-file-item .file-name-link i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.existing-file-item .file-name-link:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
+.btn-remove-file {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #98A2B3;
+    font-size: 1rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+    transition: all 0.18s ease;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.btn-remove-file:hover {
+    color: #D92D20;
+    background: #FEF3F2;
+}
+
+.existing-file-item.removing {
+    opacity: 0;
+    transform: translateX(8px);
+    pointer-events: none;
 }
 
 /* Ficha PDF Button */
