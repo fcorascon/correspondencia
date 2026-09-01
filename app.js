@@ -12,14 +12,15 @@
     let tiposData = []; // Para el select de Tipo
 
     let currentPage = 1;
-    const pageSize = 20;
+    let pageSize = 20;
     let currentFilter = 'todos';
-
+    let sortField = null;
+    let sortDir = 'asc';
     const schemas = {
         recibida: [
-            { id: 'Fecha_Recibido', name: 'FECHA RECIBIDO', type: 'date' },
-            { id: 'Remite', name: 'REMITE', type: 'text', full: true },
-            { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true },
+            { id: 'Fecha_Recibido', name: 'FECHA RECIBIDO', type: 'date', required: true },
+            { id: 'Remite', name: 'REMITE', type: 'text', full: true, required: true },
+            { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true, required: true },
             { id: 'Recibio', name: 'RECIBIÓ', type: 'select', source: 'autorizados' },
             { id: 'fecha_evento', name: 'FECHA EVENTO', type: 'date' },
             { id: 'HORA', name: 'HORA', type: 'time' },
@@ -29,21 +30,21 @@
             { id: 'PDF-Imagen', name: 'ARCHIVO/PDF', type: 'file' }
         ],
         despachada: [
-            { id: 'Fecha', name: 'FECHA', type: 'date' },
+            { id: 'Fecha', name: 'FECHA', type: 'date', required: true },
             { id: 'Elaboro', name: 'ELABORÓ', type: 'select', source: 'autorizados' },
-            { id: 'Dirigido', name: 'DIRIGIDO', type: 'text' },
-            { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true },
+            { id: 'Dirigido', name: 'DIRIGIDO', type: 'text', required: true },
+            { id: 'Asunto', name: 'ASUNTO', type: 'text', full: true, required: true },
             { id: 'Estatus', name: 'ESTATUS', type: 'select', source: 'status' },
-            { id: 'Recibió', name: 'RECIBIÓ', type: 'text' },
+            { id: 'Recibíó', name: 'RECIBIÓ', type: 'text' },
             { id: 'Fecha_recepcion', name: 'FECHA RECEPCIÓN', type: 'date' },
             { id: 'TELEFONO', name: 'TELÉFONO', type: 'text' },
             { id: 'CORREO', name: 'CORREO', type: 'email' },
             { id: 'Archivos y multimedia', name: 'ARCHIVOS', type: 'file' }
         ],
         iniciativas: [
-            { id: 'fecha_oficio', name: 'FECHA OFICIO', type: 'date' },
-            { id: 'fecha_presentacion_oficialia', name: 'OFICIALÍA', type: 'date' },
-            { id: 'texto', name: 'INICIATIVA', type: 'text', full: true },
+            { id: 'fecha_oficio', name: 'FECHA OFICIO', type: 'date', required: true },
+            { id: 'fecha_presentacion_oficialia', name: 'OFICIALIÁ', type: 'date' },
+            { id: 'texto', name: 'INICIATIVA', type: 'text', full: true, required: true },
             { id: 'comision', name: 'COMISIÓN', type: 'text' },
             { id: 'fecha_turno_legis', name: 'TURNO LEGIS', type: 'date' },
             { id: 'fecha_pleno', name: 'PLENO', type: 'date' },
@@ -56,9 +57,9 @@
             { id: 'proyecto_decreto', name: 'PROYECTO DECRETO', type: 'file', maxFiles: 5 }
         ],
         proposiciones: [
-            { id: 'fecha_ingreso_procepar', name: 'INGRESO PROCEPAR', type: 'date' },
+            { id: 'fecha_ingreso_procepar', name: 'INGRESO PROCEPAR', type: 'date', required: true },
             { id: 'fecha_pleno', name: 'FECHA PLENO', type: 'date' },
-            { id: 'proposicion', name: 'PROPOSICIÓN', type: 'text', full: true },
+            { id: 'proposicion', name: 'PROPOSICIÓN', type: 'text', full: true, required: true },
             { id: 'resultado_votacion', name: 'VOTACIÓN', type: 'text' },
             { id: 'fecha_acuse_recibido_autoridad', name: 'ACUSE AUTORIDAD', type: 'date' },
             { id: 'fecha_respuesta_autoridad', name: 'RESPUESTA AUTORIDAD', type: 'date' },
@@ -71,10 +72,10 @@
             { id: 'pdf_foto', name: 'ARCHIVO', type: 'file' }
         ],
         fiscalizacion: [
-            { id: 'ano', name: 'AÑO', type: 'select', options: ['2024', '2025', '2026', '2027', '2028', '2029', '2030'] },
-            { id: 'fecha_sesion', name: 'FECHA SESIÓN', type: 'date' },
-            { id: 'dictamen_no', name: 'NO. DICTAMEN', type: 'text' },
-            { id: 'dependencia', name: 'DEPENDENCIA / ORGANISMO', type: 'text', full: true },
+            { id: 'ano', name: 'AÑO', type: 'select', options: ['2024', '2025', '2026', '2027', '2028', '2029', '2030'], required: true },
+            { id: 'fecha_sesion', name: 'FECHA SESIÓN', type: 'date', required: true },
+            { id: 'dictamen_no', name: 'NO. DICTAMEN', type: 'text', required: true },
+            { id: 'dependencia', name: 'DEPENDENCIA / ORGANISMO', type: 'text', full: true, required: true },
             { id: 'observaciones', name: 'OBSERVACIONES', type: 'textarea', full: true },
             { id: 'dictamen', name: 'DICTAMEN', type: 'textarea', full: true },
             { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA', 'NO VOTO'] },
@@ -158,6 +159,158 @@
         const d = String(date.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
     }
+
+    // Formatea cualquier cadena de fecha al formato dd-mm-aaaa para mostrar en pantalla y PDF
+    function formatDateDMY(str) {
+        if (!str) return '—';
+        const dt = parseDate(String(str).trim());
+        if (!dt || isNaN(dt.getTime())) return String(str).trim();
+        const d = String(dt.getDate()).padStart(2, '0');
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const y = dt.getFullYear();
+        return `${d}-${m}-${y}`;
+    }
+
+    // ================================================
+    // TOAST NOTIFICATIONS
+    // ================================================
+    function showToast(message, type = 'info', duration = 4500) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+        const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', warning: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `<i class="bi ${icons[type] || icons.info}"></i><span>${escapeHTML(message)}</span>`;
+        toast.onclick = () => dismissToast(toast);
+        container.appendChild(toast);
+        setTimeout(() => dismissToast(toast), duration);
+    }
+    function dismissToast(toast) {
+        if (!toast.parentElement) return;
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+    }
+
+    // ================================================
+    // CUSTOM CONFIRM DIALOG (Promise-based)
+    // ================================================
+    function showConfirm(title, message, okLabel = 'Eliminar') {
+        return new Promise(resolve => {
+            const overlay = document.getElementById('confirmOverlay');
+            if (!overlay) { resolve(window.confirm(message)); return; }
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmOkBtn').textContent = okLabel;
+            overlay.classList.add('active');
+            const cleanup = (result) => {
+                overlay.classList.remove('active');
+                document.getElementById('confirmOkBtn').removeEventListener('click', handleOk);
+                document.getElementById('confirmCancelBtn').removeEventListener('click', handleCancel);
+                resolve(result);
+            };
+            const handleOk = () => cleanup(true);
+            const handleCancel = () => cleanup(false);
+            document.getElementById('confirmOkBtn').addEventListener('click', handleOk, { once: true });
+            document.getElementById('confirmCancelBtn').addEventListener('click', handleCancel, { once: true });
+        });
+    }
+
+    // ================================================
+    // SEARCH HIGHLIGHTING
+    // ================================================
+    function highlightText(str, term) {
+        if (!str) return '';
+        const raw = String(str);
+        if (!term || !term.trim()) return escapeHTML(raw);
+        const safeTerm = term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${safeTerm})`, 'gi');
+        return raw.split(regex).map((part, i) =>
+            i % 2 === 1 ? `<mark class="hl">${escapeHTML(part)}</mark>` : escapeHTML(part)
+        ).join('');
+    }
+
+    // ================================================
+    // SKELETON LOADER
+    // ================================================
+    function renderSkeletonGrid() {
+        const grid = document.getElementById('dataGrid');
+        if (!grid) return;
+        const cols = currentSection === 'fiscalizacion' ? 9 : 5;
+        const widths = [80, 100, 160, 200, 120, 100, 100, 100, 50];
+        let html = '<table class="data-table"><tbody>';
+        for (let r = 0; r < 8; r++) {
+            html += '<tr class="skeleton-row">';
+            for (let c = 0; c < cols; c++) {
+                const w = widths[c] || 120;
+                html += `<td><span class="skeleton skeleton-cell" style="width:${w}px;"></span></td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        grid.innerHTML = html;
+    }
+
+    // ================================================
+    // SORTING
+    // ================================================
+    function applySortToData(data) {
+        if (!sortField) return data;
+        let field = sortField;
+        if (field === '_title') {
+            if (currentSection === 'recibida') field = 'Remite';
+            else if (currentSection === 'despachada') field = 'Dirigido';
+            else if (currentSection === 'iniciativas') field = 'texto';
+            else if (currentSection === 'proposiciones') field = 'proposicion';
+        }
+        return [...data].sort((a, b) => {
+            let vA = String(getItemValue(a, field) || '');
+            let vB = String(getItemValue(b, field) || '');
+            const dA = parseDate(vA), dB = parseDate(vB);
+            if (dA && dB && !isNaN(dA) && !isNaN(dB)) return sortDir === 'asc' ? dA - dB : dB - dA;
+            const cmp = vA.localeCompare(vB, 'es', { numeric: true, sensitivity: 'base' });
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+    }
+
+    window.sortBy = function(field) {
+        sortField = (sortField === field && sortDir === 'desc') ? null : field;
+        if (sortField) sortDir = (sortField === field && sortDir === 'asc') ? 'desc' : 'asc';
+        renderGrid();
+    };
+
+    // ================================================
+    // DYNAMIC YEAR FILTER
+    // ================================================
+    function populateYearFilter(data) {
+        const yearFilter = document.getElementById('yearFilter');
+        if (!yearFilter) return;
+        const years = new Set();
+        data.forEach(item => {
+            const candidates = ['ano', 'fecha_sesion', 'Fecha_Recibido', 'Fecha', 'fecha_oficio', 'fecha_ingreso_procepar'];
+            for (const f of candidates) {
+                const v = String(getItemValue(item, f) || '');
+                if (!v) continue;
+                if (/^\d{4}$/.test(v)) { years.add(parseInt(v)); break; }
+                const dt = parseDate(v);
+                if (dt && !isNaN(dt)) { years.add(dt.getFullYear()); break; }
+            }
+        });
+        const currentVal = yearFilter.value;
+        const sorted = [...years].sort((a, b) => b - a);
+        yearFilter.innerHTML = '<option value="">Todos los Años</option>' +
+            sorted.map(y => `<option value="${y}"${String(y) === currentVal ? ' selected' : ''}>${y}</option>`).join('');
+    }
+
+    // ================================================
+    // DARK MODE
+    // ================================================
+    window.toggleDarkMode = function() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark ? '1' : '0');
+        const btn = document.getElementById('darkModeBtn');
+        if (btn) btn.innerHTML = isDark ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
+    };
 
     function initSupabase() {
         if (typeof supabase === 'undefined') return false;
@@ -246,8 +399,7 @@
     }
 
     async function loadData() {
-        const grid = document.getElementById('dataGrid');
-        if (grid) grid.innerHTML = '<div style="text-align: center; padding: 4rem;"><i class="bi bi-arrow-repeat spin" style="font-size: 2rem; color: var(--primary);"></i><p style="margin-top: 1rem; color: var(--text-muted);">Cargando registros...</p></div>';
+        renderSkeletonGrid();
 
         if (!_supabase && !initSupabase()) return;
 
@@ -261,7 +413,9 @@
 
         if (error) {
             console.error('Error:', error);
+            const grid = document.getElementById('dataGrid');
             if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso a "${escapeHTML(currentSection)}": ${escapeHTML(error.message)}</div>`;
+            showToast(`Error al cargar datos: ${error.message}`, 'error');
             return;
         }
 
@@ -281,6 +435,7 @@
             });
         }
 
+        populateYearFilter(allData);
         updateStats(allData);
         currentPage = 1;
         applyFiltersAndRender(true);
@@ -392,7 +547,12 @@
         if (!grid) return;
         grid.innerHTML = '';
 
-        const totalItems = currentFilteredData.length;
+        const searchInput = document.getElementById('searchInput');
+        const tableSearchInput = document.getElementById('tableSearchInput');
+        const activeSearchTerm = (searchInput?.value || tableSearchInput?.value || '').trim();
+
+        const sortedData = applySortToData(currentFilteredData);
+        const totalItems = sortedData.length;
         const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
         if (currentPage > totalPages) currentPage = totalPages;
@@ -417,25 +577,37 @@
         }
 
         const startIndex = (currentPage - 1) * pageSize;
-        const pageData = currentFilteredData.slice(startIndex, startIndex + pageSize);
+        const pageData = sortedData.slice(startIndex, startIndex + pageSize);
 
         const table = document.createElement('table');
         table.className = 'data-table';
+
+        const getSortHeader = (fieldKey, label, widthStyle = '') => {
+            const isSorted = sortField === fieldKey;
+            const iconClass = isSorted 
+                ? (sortDir === 'asc' ? 'bi-arrow-up' : 'bi-arrow-down') 
+                : 'bi-arrow-down-up';
+            const sortClass = isSorted ? `sort-${sortDir}` : '';
+            return `<th class="sortable ${sortClass}" style="${widthStyle}" onclick="sortBy('${fieldKey}')" title="Ordenar por ${escapeHTML(label)}">
+                ${escapeHTML(label)} <i class="bi ${iconClass} sort-icon"></i>
+            </th>`;
+        };
 
         // Table Header
         let headerHtml = '<thead><tr>';
         if (currentSection === 'fiscalizacion') {
             headerHtml += '<th style="width: 100px;">Acciones</th>';
-            headerHtml += '<th style="width: 80px;">Año</th>';
-            headerHtml += '<th style="width: 120px;">No. Dictamen</th>';
-            headerHtml += '<th style="width: 130px;">Fecha Sesión</th>';
-            headerHtml += '<th>Dependencia</th>';
-            headerHtml += '<th style="width: 130px;">Voto Diputada</th>';
-            headerHtml += '<th>Fallo</th>';
-            headerHtml += '<th style="width: 130px;">Voto Final</th>';
+            headerHtml += getSortHeader('ano', 'Año', 'width: 80px;');
+            headerHtml += getSortHeader('dictamen_no', 'No. Dictamen', 'width: 120px;');
+            headerHtml += getSortHeader('fecha_sesion', 'Fecha Sesión', 'width: 130px;');
+            headerHtml += getSortHeader('dependencia', 'Dependencia');
+            headerHtml += getSortHeader('voto_diputada', 'Voto Diputada', 'width: 130px;');
+            headerHtml += getSortHeader('fallo', 'Fallo');
+            headerHtml += getSortHeader('voto_final', 'Voto Final', 'width: 130px;');
+            headerHtml += '<th style="width: 50px;">Ficha</th>';
         } else {
             headerHtml += '<th style="width: 110px;">Acciones</th>';
-            headerHtml += '<th>Registro / Asunto</th>';
+            headerHtml += getSortHeader('_title', 'Registro / Asunto');
             headerHtml += `<th>${currentSection === 'recibida' ? 'RECIBIÓ' : 'Detalle Principal'}</th>`;
             headerHtml += '<th>Estado / Meta</th>';
             headerHtml += '<th>Archivo</th>';
@@ -451,7 +623,7 @@
             if (currentSection === 'fiscalizacion') {
                 const ano = getItemValue(item, 'ano') || '2024';
                 const dictamenNo = getItemValue(item, 'dictamen_no') || '—';
-                const fechaSesion = getItemValue(item, 'fecha_sesion') || '—';
+                const fechaSesion = formatDateDMY(getItemValue(item, 'fecha_sesion'));
                 const dependencia = getItemValue(item, 'dependencia') || 'Sin Dependencia';
                 const fallo = getItemValue(item, 'fallo') || '—';
                 
@@ -485,20 +657,21 @@
                         <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
                         <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
                         <i class="bi bi-trash action-icon" style="color: #D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                        <i class="bi bi-file-pdf action-icon-pdf" onclick="viewPDF(${rowId})" title="Ficha PDF"></i>
                     </td>
-                    <td><span class="badge badge-info" style="font-weight: 600;">${escapeHTML(String(ano))}</span></td>
-                    <td><span style="font-weight: 600; color: var(--primary);">${escapeHTML(dictamenNo)}</span></td>
+                    <td><span class="badge badge-info" style="font-weight: 600;">${highlightText(String(ano), activeSearchTerm)}</span></td>
+                    <td><span style="font-weight: 600; color: var(--primary);">${highlightText(dictamenNo, activeSearchTerm)}</span></td>
                     <td><span style="color: var(--text-muted); font-size: 0.875rem;">${escapeHTML(fechaSesion)}</span></td>
                     <td>
                         <div class="row-item">
                             <div class="avatar">${initialLetter}</div>
                             <div class="item-main">
-                                <span class="item-title" style="font-size: 0.875rem;">${escapeHTML(dependencia)}</span>
+                                <span class="item-title" style="font-size: 0.875rem;">${highlightText(dependencia, activeSearchTerm)}</span>
                             </div>
                         </div>
                     </td>
                     <td>${getBadge(votoDiputada)}</td>
-                    <td><span style="font-size: 0.875rem; font-weight: 500;">${escapeHTML(fallo)}</span></td>
+                    <td><span style="font-size: 0.875rem; font-weight: 500;">${highlightText(fallo, activeSearchTerm)}</span></td>
                     <td>${getBadge(votoFinal)}</td>
                 `;
             } else {
@@ -512,7 +685,7 @@
                     titleVal = getItemValue(item, 'Remite');
                     subtitleVal = getItemValue(item, 'Asunto');
                     detailVal = getItemValue(item, 'Recibio') || 'N/A';
-                    metaHtml = `<span class="badge badge-success">${escapeHTML(getItemValue(item, 'Fecha_Recibido') || 'FECHA')}</span>`;
+                    metaHtml = `<span class="badge badge-success">${escapeHTML(formatDateDMY(getItemValue(item, 'Fecha_Recibido')) || 'FECHA')}</span>`;
                     fileHtml = renderFileLinks(getItemValue(item, 'PDF-Imagen'));
                 }
                 else if (currentSection === 'despachada') {
@@ -526,7 +699,7 @@
                     titleVal = `Iniciativa #${item.id || ''}`;
                     subtitleVal = getItemValue(item, 'texto') || getItemValue(item, 'INICIATIVA');
                     detailVal = getItemValue(item, 'comision') || 'SIN COMISIÓN';
-                    metaHtml = `<span class="badge badge-warning">${escapeHTML(getItemValue(item, 'fecha_oficio') || 'OFICIO')}</span>`;
+                    metaHtml = `<span class="badge badge-warning">${escapeHTML(formatDateDMY(getItemValue(item, 'fecha_oficio')) || 'OFICIO')}</span>`;
                     const inicFileFields = [
                         ['pdf', 'PDF'],
                         ['opinion_consultoria', 'OP. CONSULTORÍA'],
@@ -546,7 +719,7 @@
                     titleVal = `Proposición #${item.id || ''}`;
                     subtitleVal = getItemValue(item, 'proposicion');
                     detailVal = getItemValue(item, 'tipo') || 'N/A';
-                    metaHtml = `<span class="badge badge-info">${escapeHTML(getItemValue(item, 'fecha_pleno') || 'PLENO')}</span>`;
+                    metaHtml = `<span class="badge badge-info">${escapeHTML(formatDateDMY(getItemValue(item, 'fecha_pleno')) || 'PLENO')}</span>`;
                     fileHtml = renderFileLinks(getItemValue(item, 'pdf_foto'));
                 }
 
@@ -557,18 +730,19 @@
                         <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
                         <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
                         <i class="bi bi-trash action-icon" style="color: #D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                        <i class="bi bi-file-pdf action-icon-pdf" onclick="viewPDF(${rowId})" title="Ficha PDF"></i>
                     </td>
                     <td>
                         <div class="row-item">
                             <div class="avatar">${initialLetter}</div>
                             <div class="item-main">
-                                <span class="item-title">${escapeHTML(titleVal || 'Sin Título')}</span>
-                                <span class="item-subtitle">${escapeHTML(subtitleVal || 'Sin descripción')}</span>
+                                <span class="item-title">${highlightText(titleVal || 'Sin Título', activeSearchTerm)}</span>
+                                <span class="item-subtitle">${highlightText(subtitleVal || 'Sin descripción', activeSearchTerm)}</span>
                             </div>
                         </div>
                     </td>
                     <td>
-                        <span class="item-subtitle">${escapeHTML(detailVal)}</span>
+                        <span class="item-subtitle">${highlightText(detailVal, activeSearchTerm)}</span>
                     </td>
                     <td>
                         ${metaHtml}
@@ -667,6 +841,11 @@
         const yearFilter = document.getElementById('yearFilter');
         if (yearFilter) yearFilter.value = '';
 
+        const btnFichaPDF = document.getElementById('btnFichaPDF');
+        if (btnFichaPDF) {
+            btnFichaPDF.style.display = section === 'fiscalizacion' ? 'inline-flex' : 'none';
+        }
+
         loadData();
     }
 
@@ -677,9 +856,14 @@
         let details = '';
         schemas[currentSection].forEach(field => {
             const val = getItemValue(item, field.id);
-            const content = field.type === 'file' 
-                ? renderFileLinks(val) 
-                : escapeHTML(val || 'N/A');
+            let content;
+            if (field.type === 'file') {
+                content = renderFileLinks(val);
+            } else if (field.type === 'date') {
+                content = escapeHTML(formatDateDMY(val) || 'N/A');
+            } else {
+                content = escapeHTML(val || 'N/A');
+            }
             details += `
                 <div class="form-group ${field.full ? 'full' : ''}">
                     <label>${escapeHTML(field.name)}</label>
@@ -694,10 +878,12 @@
         const fields = document.getElementById('formFields');
         const title = document.getElementById('modalTitle');
         const form = document.getElementById('dataForm');
+        const cancelBtn = form.querySelector('button[type="button"]');
 
         title.innerText = "Detalles del Registro";
         fields.innerHTML = details;
         form.querySelector('button[type="submit"]').style.display = 'none';
+        if (cancelBtn) cancelBtn.innerText = 'Cerrar';
         overlay.style.display = 'flex';
     };
 
@@ -708,11 +894,21 @@
     };
 
     window.deleteEntry = async function (id) {
-        if (!confirm('¿Estás seguro de que deseas borrar este registro?')) return;
+        const confirmed = await showConfirm(
+            'Eliminar Registro',
+            '¿Estás seguro de que deseas borrar este registro? Esta acción no se puede deshacer.',
+            'Eliminar'
+        );
+        if (!confirmed) return;
+
         const tableName = getTableName(currentSection);
         const { error } = await _supabase.from(tableName).delete().eq('id', id);
-        if (error) alert('Error al borrar: ' + error.message);
-        else loadData();
+        if (error) {
+            showToast('Error al borrar: ' + error.message, 'error');
+        } else {
+            showToast('Registro eliminado exitosamente', 'success');
+            loadData();
+        }
     };
 
     window.openModal = function (isEdit = false, item = null) {
@@ -726,19 +922,38 @@
         currentEditId = isEdit ? item.id : null;
         title.innerText = isEdit ? "Editar Registro" : "Nuevo Registro";
         form.querySelector('button[type="submit"]').style.display = 'block';
+        // Restaurar el texto del botón cancelar (puede haber sido cambiado por viewEntry)
+        const cancelBtn = form.querySelector('button[type="button"]');
+        if (cancelBtn) cancelBtn.innerText = 'Cancelar';
         fields.innerHTML = '';
+
+        // Limpiar errores previos
+        form.querySelectorAll('.field-error').forEach(el => el.remove());
+        form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
         schemas[currentSection].forEach(field => {
             const div = document.createElement('div');
             div.className = `form-group ${field.full ? 'full' : ''}`;
             const rawValue = isEdit ? getItemValue(item, field.id) : '';
             const safeValue = escapeHTML(rawValue);
+            const reqStar = field.required ? '<span class="required-star" title="Obligatorio">*</span>' : '';
+
+            // Para inputs de fecha, normalizar al formato yyyy-MM-dd que requiere <input type="date">
+            let dateValue = '';
+            if (field.type === 'date' && rawValue) {
+                const dt = parseDate(String(rawValue).trim());
+                if (dt && !isNaN(dt.getTime())) {
+                    dateValue = formatDateToYMD(dt);
+                } else {
+                    dateValue = rawValue; // dejar como está si no se puede parsear
+                }
+            }
 
             if (field.type === 'file') {
                 const maxFiles = field.maxFiles || 10;
                 div.innerHTML = `
-                    <label>${escapeHTML(field.name)}</label>
-                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;alert('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.');}">
+                    <label>${escapeHTML(field.name)} ${reqStar}</label>
+                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;showToast('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.', 'warning');}">
                     ${isEdit && rawValue ? `<small style="margin-top:0.25rem; display:block; color:var(--text-muted)">Archivos actuales: ${renderFileLinks(rawValue)}</small>` : ''}
                     <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</small>
                 `;
@@ -764,7 +979,7 @@
                 }).join('');
 
                 div.innerHTML = `
-                    <label>${escapeHTML(field.name)}</label>
+                    <label>${escapeHTML(field.name)} ${reqStar}</label>
                     <select name="${field.id}">
                         <option value="">${(!field.options && sourceData.length === 0) ? 'CARGANDO LISTA...' : 'SELECCIONE...'}</option>
                         ${options}
@@ -792,17 +1007,18 @@
                 }
             } else if (field.type === 'textarea') {
                 div.innerHTML = `
-                    <label>${escapeHTML(field.name)}</label>
+                    <label>${escapeHTML(field.name)} ${reqStar}</label>
                     <textarea name="${field.id}" placeholder="Ingresa ${escapeHTML(field.name.toLowerCase())}">${safeValue}</textarea>
                 `;
             } else if (field.type === 'date' || field.type === 'time') {
+                const inputVal = field.type === 'date' ? escapeHTML(dateValue) : safeValue;
                 div.innerHTML = `
-                    <label>${escapeHTML(field.name)}</label>
-                    <input type="${field.type}" name="${field.id}" value="${safeValue}">
+                    <label>${escapeHTML(field.name)} ${reqStar}</label>
+                    <input type="${field.type}" name="${field.id}" value="${inputVal}">
                 `;
             } else {
                 div.innerHTML = `
-                    <label>${escapeHTML(field.name)}</label>
+                    <label>${escapeHTML(field.name)} ${reqStar}</label>
                     <input type="${field.type === 'email' ? 'email' : 'text'}" name="${field.id}" value="${safeValue}" 
                            placeholder="${field.readonly ? 'ID autogenerado' : 'Ingresa ' + escapeHTML(field.name.toLowerCase())}" 
                            ${field.readonly ? 'readonly' : ''}>
@@ -822,7 +1038,7 @@
 
     window.exportDailyExcel = function () {
         if (!allData || allData.length === 0) {
-            alert('No hay datos para exportar.');
+            showToast('No hay datos para exportar.', 'warning');
             return;
         }
 
@@ -839,23 +1055,25 @@
         else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
         else if (currentSection === 'fiscalizacion') dateField = 'fecha_sesion';
 
-        const dailyData = allData.filter(item => {
+        let exportSubset = allData.filter(item => {
             const itemDateStr = getItemValue(item, dateField) || getItemValue(item, 'ano');
             if (!itemDateStr) return false;
             const parsed = parseDate(itemDateStr);
             if (!parsed) {
-                // If it's just year comparison or text
                 return String(itemDateStr).includes(selectedDateStr) || String(itemDateStr) === selectedDateStr;
             }
             return formatDateToYMD(parsed) === selectedDateStr;
         });
 
-        if (dailyData.length === 0) {
-            alert(`No hay registros del día (${selectedDateStr}) en esta sección.`);
-            return;
+        if (exportSubset.length === 0) {
+            // Si no hay registros de esa fecha exacta, exportamos la vista filtrada actual
+            exportSubset = currentFilteredData.length > 0 ? currentFilteredData : allData;
+            showToast(`Exportando ${exportSubset.length} registros de la vista actual`, 'info');
+        } else {
+            showToast(`Exportando ${exportSubset.length} registros del día ${selectedDateStr}`, 'success');
         }
 
-        const exportData = dailyData.map(item => {
+        const exportData = exportSubset.map(item => {
             const row = {};
             schemas[currentSection].forEach(field => {
                 if (field.type !== 'file') {
@@ -872,7 +1090,380 @@
         XLSX.writeFile(wb, `Reporte_${currentSection}_${selectedDateStr}.xlsx`);
     };
 
-    function checkSession() {
+    let currentPdfDoc = null;
+    let currentPdfFilename = 'Ficha.pdf';
+
+    window.downloadCurrentPdf = function () {
+        if (currentPdfDoc) {
+            currentPdfDoc.save(currentPdfFilename);
+        }
+    };
+
+    window.closePdfPreview = function () {
+        const overlay = document.getElementById('pdfPreviewOverlay');
+        if (overlay) overlay.style.display = 'none';
+        const iframe = document.getElementById('pdfPreviewIframe');
+        if (iframe) iframe.src = 'about:blank';
+        currentPdfDoc = null;
+    };
+
+    function renderFichaPage(doc, item, section, isBatch, currentIdx, totalCount) {
+        const pageWidth = 215.9; // Letter width in mm
+        const pageHeight = 279.4; // Letter height in mm
+        const margin = 12;
+        const contentWidth = pageWidth - margin * 2; // 191.9 mm
+
+        // 1. Top Header Banner
+        doc.setFillColor(14, 55, 215); // #0e37d7
+        doc.rect(0, 0, pageWidth, 12.5, 'F');
+        doc.setFillColor(10, 40, 159); // #0a289f
+        doc.rect(0, 12.5, pageWidth, 1.5, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11.5);
+        
+        let mainTitle = 'FICHA EJECUTIVA DE ' + section.toUpperCase();
+        if (section === 'fiscalizacion') mainTitle = 'FICHA EJECUTIVA DE FISCALIZACIÓN';
+        if (isBatch) mainTitle += ` (${currentIdx} de ${totalCount})`;
+        
+        doc.text(mainTitle, pageWidth / 2, 8.5, { align: 'center' });
+
+        let y = 17;
+
+        if (section === 'fiscalizacion') {
+            const ano = String(getItemValue(item, 'ano') || '2024');
+            const dictamenNo = String(getItemValue(item, 'dictamen_no') || '—');
+            const fechaSesion = formatDateDMY(getItemValue(item, 'fecha_sesion'));
+            const dependencia = String(getItemValue(item, 'dependencia') || 'Sin Dependencia');
+            const votoDip = String(getItemValue(item, 'voto_diputada') || '—');
+            const votoFin = String(getItemValue(item, 'voto_final') || '—');
+            const fallo = String(getItemValue(item, 'fallo') || '—');
+            const obs = String(getItemValue(item, 'observaciones') || 'Sin observaciones.');
+            const dict = String(getItemValue(item, 'dictamen') || 'Sin dictamen.');
+
+            // Top Metadata Card (2 rows)
+            const cardH = 27;
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(margin, y, contentWidth, cardH, 2, 2, 'FD');
+
+            // Row 1
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('NO. DICTAMEN', margin + 3.5, y + 4.2);
+            doc.setFontSize(9.5);
+            doc.setTextColor(14, 55, 215);
+            doc.text(dictamenNo, margin + 3.5, y + 9.2);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('AÑO', margin + 32, y + 4.2);
+            doc.setFontSize(8.5);
+            doc.setTextColor(30, 41, 59);
+            doc.text(ano, margin + 32, y + 9.2);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('FECHA SESIÓN', margin + 52, y + 4.2);
+            doc.setFontSize(8.5);
+            doc.setTextColor(30, 41, 59);
+            doc.text(fechaSesion, margin + 52, y + 9.2);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('DEPENDENCIA / ORGANISMO', margin + 84, y + 4.2);
+            doc.setFontSize(8);
+            doc.setTextColor(30, 41, 59);
+            const depLines = doc.splitTextToSize(dependencia, contentWidth - 86);
+            doc.text(depLines, margin + 84, y + 9.2);
+
+            // Divider between rows
+            doc.setDrawColor(226, 232, 240);
+            doc.line(margin + 2, y + 13.5, margin + contentWidth - 2, y + 13.5);
+
+            // Row 2
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('VOTO DIPUTADA', margin + 3.5, y + 17.5);
+            doc.setFontSize(8);
+            if (votoDip.toUpperCase().includes('FAVOR')) doc.setTextColor(18, 183, 106);
+            else if (votoDip.toUpperCase().includes('CONTRA')) doc.setTextColor(240, 68, 56);
+            else doc.setTextColor(30, 41, 59);
+            doc.text(votoDip, margin + 3.5, y + 23);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('VOTO FINAL', margin + 52, y + 17.5);
+            doc.setFontSize(8);
+            if (votoFin.toUpperCase().includes('FAVOR')) doc.setTextColor(18, 183, 106);
+            else if (votoFin.toUpperCase().includes('CONTRA')) doc.setTextColor(240, 68, 56);
+            else doc.setTextColor(30, 41, 59);
+            doc.text(votoFin, margin + 52, y + 23);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('FALLO', margin + 84, y + 17.5);
+            doc.setFontSize(8);
+            doc.setTextColor(30, 41, 59);
+            const falloLines = doc.splitTextToSize(fallo, contentWidth - 86);
+            doc.text(falloLines, margin + 84, y + 23);
+
+            y += cardH + 3.5;
+
+            // Auto-fit calculation for Observaciones and Dictamen
+            const maxBottomY = 269;
+            const availableHeight = maxBottomY - y; // ~220 mm
+
+            let fontSize = 7.5;
+            let lineHeight = 3.3;
+            let padding = 2.5;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(fontSize);
+            let obsLines = doc.splitTextToSize(obs, contentWidth - (padding * 2));
+            let dictLines = doc.splitTextToSize(dict, contentWidth - (padding * 2));
+            let totalNeeded = (obsLines.length + dictLines.length) * lineHeight + 22;
+
+            if (totalNeeded > availableHeight) {
+                fontSize = 7.0;
+                lineHeight = 3.0;
+                doc.setFontSize(fontSize);
+                obsLines = doc.splitTextToSize(obs, contentWidth - (padding * 2));
+                dictLines = doc.splitTextToSize(dict, contentWidth - (padding * 2));
+                totalNeeded = (obsLines.length + dictLines.length) * lineHeight + 20;
+            }
+
+            if (totalNeeded > availableHeight) {
+                fontSize = 6.5;
+                lineHeight = 2.75;
+                doc.setFontSize(fontSize);
+                obsLines = doc.splitTextToSize(obs, contentWidth - (padding * 2));
+                dictLines = doc.splitTextToSize(dict, contentWidth - (padding * 2));
+                totalNeeded = (obsLines.length + dictLines.length) * lineHeight + 18;
+            }
+
+            if (totalNeeded > availableHeight) {
+                fontSize = 6.0;
+                lineHeight = 2.5;
+                doc.setFontSize(fontSize);
+                obsLines = doc.splitTextToSize(obs, contentWidth - (padding * 2));
+                dictLines = doc.splitTextToSize(dict, contentWidth - (padding * 2));
+            }
+
+            // Section 1: Observaciones
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.setTextColor(30, 41, 59);
+            doc.setFillColor(14, 55, 215);
+            doc.rect(margin, y, 2.2, 4.2, 'F');
+            doc.text('OBSERVACIONES', margin + 4.5, y + 3.5);
+            y += 5.5;
+
+            const obsBoxH = (obsLines.length * lineHeight) + (padding * 2);
+            doc.setFillColor(252, 252, 253);
+            doc.setDrawColor(234, 236, 240);
+            doc.setLineWidth(0.25);
+            doc.roundedRect(margin, y, contentWidth, obsBoxH, 1.5, 1.5, 'FD');
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(fontSize);
+            doc.setTextColor(51, 65, 85);
+            doc.text(obsLines, margin + padding, y + padding + (fontSize * 0.28));
+
+            y += obsBoxH + 3.5;
+
+            // Section 2: Dictamen
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.setTextColor(30, 41, 59);
+            doc.setFillColor(14, 55, 215);
+            doc.rect(margin, y, 2.2, 4.2, 'F');
+            doc.text('DICTAMEN', margin + 4.5, y + 3.5);
+            y += 5.5;
+
+            const dictBoxH = Math.min((dictLines.length * lineHeight) + (padding * 2), maxBottomY - y);
+            doc.setFillColor(252, 252, 253);
+            doc.setDrawColor(234, 236, 240);
+            doc.setLineWidth(0.25);
+            doc.roundedRect(margin, y, contentWidth, dictBoxH, 1.5, 1.5, 'FD');
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(fontSize);
+            doc.setTextColor(51, 65, 85);
+            doc.text(dictLines, margin + padding, y + padding + (fontSize * 0.28));
+
+        } else {
+            // Other sections (Recibida, Despachada, Iniciativas, Proposiciones)
+            const fields = (schemas[section] || []).filter(f => f.type !== 'file');
+            
+            const cardH = 14;
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(margin, y, contentWidth, cardH, 2, 2, 'FD');
+
+            const regId = item.id ? `ID #${item.id}` : 'REGISTRO';
+            const fechaRec = formatDateDMY(getItemValue(item, 'Fecha_Recibido') || getItemValue(item, 'Fecha') || getItemValue(item, 'fecha_oficio') || getItemValue(item, 'fecha_ingreso_procepar'));
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('IDENTIFICADOR', margin + 3.5, y + 4.2);
+            doc.setFontSize(9);
+            doc.setTextColor(14, 55, 215);
+            doc.text(String(regId), margin + 3.5, y + 9.5);
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('FECHA PRINCIPAL', margin + 45, y + 4.2);
+            doc.setFontSize(8.5);
+            doc.setTextColor(30, 41, 59);
+            doc.text(String(fechaRec), margin + 45, y + 9.5);
+
+            y += cardH + 4;
+
+            const maxBottomY = 269;
+            const availableHeight = maxBottomY - y;
+            let fontSize = 7.5;
+            let lineHeight = 3.3;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(fontSize);
+
+            let totalLines = 0;
+            fields.forEach(f => {
+                let val = String(getItemValue(item, f.id) || '—');
+                const lines = doc.splitTextToSize(val, contentWidth - 45);
+                totalLines += Math.max(lines.length, 1);
+            });
+
+            if ((totalLines * lineHeight) + (fields.length * 3.5) > availableHeight) {
+                fontSize = 7.0;
+                lineHeight = 3.0;
+            }
+            if ((totalLines * lineHeight) + (fields.length * 3.5) > availableHeight) {
+                fontSize = 6.5;
+                lineHeight = 2.75;
+            }
+
+            fields.forEach(field => {
+                const label = field.name;
+                let value = String(getItemValue(item, field.id) || '—');
+                const labelWidth = 42;
+                const valueWidth = contentWidth - labelWidth - 4;
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7);
+                doc.setTextColor(100, 116, 139);
+                doc.text(label, margin, y + 2.5);
+
+                doc.setDrawColor(234, 236, 240);
+                doc.setLineWidth(0.2);
+                doc.line(margin, y + 4.5, margin + labelWidth - 2, y + 4.5);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(fontSize);
+                doc.setTextColor(30, 41, 59);
+
+                const lines = doc.splitTextToSize(value, valueWidth);
+                doc.text(lines, margin + labelWidth + 2, y + 2.5);
+
+                const blockH = Math.max(lines.length * lineHeight, 4.5) + 2.5;
+                y += blockH;
+            });
+        }
+
+        // Single Page Footer (strictly at bottom of Letter page)
+        doc.setFillColor(248, 250, 252);
+        doc.rect(0, pageHeight - 8, pageWidth, 8, 'F');
+        doc.setTextColor(148, 163, 184);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.text(`Generado el ${new Date().toLocaleDateString('es-ES')} - Correspondencia Mayola Gaona`, margin, pageHeight - 3);
+        const pageLabel = isBatch ? `Página ${currentIdx} de ${totalCount}` : 'Página 1 de 1';
+        doc.text(pageLabel, pageWidth - margin, pageHeight - 3, { align: 'right' });
+    }
+
+    window.viewPDF = function (id) {
+        const item = allData.find(function (d) { return d.id === id; });
+        if (!item) return;
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('Librería jsPDF no disponible. Por favor verifique su conexión a internet.');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        // Letter vertical (portrait)
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+
+        renderFichaPage(doc, item, currentSection, false, 1, 1);
+
+        const safeDep = String(getItemValue(item, 'dependencia') || getItemValue(item, 'Remite') || getItemValue(item, 'Dirigido') || 'Ficha').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+        const safeDict = String(getItemValue(item, 'dictamen_no') || item.id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        currentPdfFilename = `Ficha_${currentSection}_${safeDep}_${safeDict}.pdf`;
+        currentPdfDoc = doc;
+
+        const pdfDataUri = doc.output('datauristring');
+        const overlay = document.getElementById('pdfPreviewOverlay');
+        const iframe = document.getElementById('pdfPreviewIframe');
+        const titleSpan = document.getElementById('pdfPreviewTitle');
+
+        if (titleSpan) {
+            titleSpan.innerText = `Previsualización: ${currentPdfFilename}`;
+        }
+
+        if (overlay && iframe) {
+            iframe.src = pdfDataUri;
+            overlay.style.display = 'flex';
+        } else {
+            doc.save(currentPdfFilename);
+        }
+    };
+
+    window.exportFichaPDF = function () {
+        if (!currentFilteredData || currentFilteredData.length === 0) {
+            alert('No hay datos en la vista actual para generar la ficha.');
+            return;
+        }
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('Librería jsPDF no disponible. Por favor verifique su conexión a internet.');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        // Letter vertical (portrait)
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+        const total = currentFilteredData.length;
+
+        currentFilteredData.forEach(function (item, idx) {
+            if (idx > 0) doc.addPage('letter', 'portrait');
+            renderFichaPage(doc, item, currentSection, true, idx + 1, total);
+        });
+
+        currentPdfFilename = `Fichas_${currentSection}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        currentPdfDoc = doc;
+
+        const pdfDataUri = doc.output('datauristring');
+        const overlay = document.getElementById('pdfPreviewOverlay');
+        const iframe = document.getElementById('pdfPreviewIframe');
+        const titleSpan = document.getElementById('pdfPreviewTitle');
+
+        if (titleSpan) {
+            titleSpan.innerText = `Previsualización: ${currentPdfFilename} (${total} páginas/registros)`;
+        }
+
+        if (overlay && iframe) {
+            iframe.src = pdfDataUri;
+            overlay.style.display = 'flex';
+        } else {
+            doc.save(currentPdfFilename);
+        }
+    };
+
+function checkSession() {
         const loggedUser = localStorage.getItem('loggedUser');
         const loggedUserRole = localStorage.getItem('loggedUserRole') || 'usuario';
         if (loggedUser) {
@@ -913,6 +1504,23 @@
             };
         }
 
+        // Selector de tamaño de página
+        const pageSizeSelect = document.getElementById('pageSizeSelect');
+        if (pageSizeSelect) {
+            pageSizeSelect.onchange = (e) => {
+                pageSize = parseInt(e.target.value, 10) || 20;
+                currentPage = 1;
+                renderGrid();
+            };
+        }
+
+        // Restaurar modo oscuro guardado
+        if (localStorage.getItem('darkMode') === '1') {
+            document.body.classList.add('dark-mode');
+            const dmBtn = document.getElementById('darkModeBtn');
+            if (dmBtn) dmBtn.innerHTML = '<i class="bi bi-sun"></i>';
+        }
+
         // Cerrar modal al dar click fuera o con Escape
         const modalOverlay = document.getElementById('modalOverlay');
         if (modalOverlay) {
@@ -920,8 +1528,19 @@
                 if (e.target === modalOverlay) window.closeModal();
             });
         }
+
+        const pdfPreviewOverlay = document.getElementById('pdfPreviewOverlay');
+        if (pdfPreviewOverlay) {
+            pdfPreviewOverlay.addEventListener('click', (e) => {
+                if (e.target === pdfPreviewOverlay) window.closePdfPreview();
+            });
+        }
+
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') window.closeModal();
+            if (e.key === 'Escape') {
+                window.closeModal();
+                window.closePdfPreview();
+            }
         });
 
         const loginForm = document.getElementById('loginForm');
@@ -947,6 +1566,7 @@
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.user-name').innerText = user.toUpperCase();
                     document.querySelector('.user-role').innerText = (String(data.rol) === 'admin' || String(data.rol) === '1') ? 'Administrador' : 'Usuario';
+                    showToast(`¡Bienvenido, ${user.toUpperCase()}!`, 'success');
                     loadData();
                 } else {
                     errorMsg.style.display = 'block';
@@ -956,8 +1576,9 @@
 
         const logoutBtn = document.querySelector('.btn-logout');
         if (logoutBtn) {
-            logoutBtn.onclick = () => {
-                if (confirm('¿CERRAR SESIÓN?')) {
+            logoutBtn.onclick = async () => {
+                const confirmed = await showConfirm('Cerrar Sesión', '¿Deseas cerrar tu sesión actual en el sistema?', 'Cerrar Sesión');
+                if (confirmed) {
                     localStorage.removeItem('loggedUser');
                     localStorage.removeItem('loggedUserRole');
                     location.reload();
@@ -1034,6 +1655,11 @@
         if (dataForm) {
             dataForm.addEventListener('input', (e) => {
                 const target = e.target;
+                // Remover error visual al escribir
+                target.classList.remove('invalid');
+                const existingErr = target.parentElement.querySelector('.field-error');
+                if (existingErr) existingErr.remove();
+
                 const isText = (target.tagName === 'INPUT' && (!target.type || target.type === 'text')) || target.tagName === 'TEXTAREA';
                 if (isText) {
                     const start = target.selectionStart;
@@ -1047,6 +1673,45 @@
 
             dataForm.onsubmit = async (e) => {
                 e.preventDefault();
+
+                // Limpiar errores visuales previos
+                e.target.querySelectorAll('.field-error').forEach(el => el.remove());
+                e.target.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+
+                // Validación de campos requeridos
+                let hasErrors = false;
+                let firstInvalidElem = null;
+
+                for (let fieldDef of schemas[currentSection]) {
+                    if (!fieldDef.required || fieldDef.readonly) continue;
+                    const el = e.target.querySelector(`[name="${fieldDef.id}"]`);
+                    if (!el) continue;
+
+                    let isFilled = false;
+                    if (fieldDef.type === 'file') {
+                        const existingFiles = currentEditId ? getItemValue(allData.find(d => d.id === currentEditId), fieldDef.id) : null;
+                        isFilled = (el.files && el.files.length > 0) || Boolean(existingFiles);
+                    } else {
+                        isFilled = el.value && el.value.trim() !== '';
+                    }
+
+                    if (!isFilled) {
+                        hasErrors = true;
+                        el.classList.add('invalid');
+                        const errMsg = document.createElement('div');
+                        errMsg.className = 'field-error';
+                        errMsg.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> Campo obligatorio';
+                        el.parentElement.appendChild(errMsg);
+                        if (!firstInvalidElem) firstInvalidElem = el;
+                    }
+                }
+
+                if (hasErrors) {
+                    showToast('Por favor completa todos los campos obligatorios.', 'warning');
+                    if (firstInvalidElem) firstInvalidElem.focus();
+                    return;
+                }
+
                 const btn = e.target.querySelector('button[type="submit"]');
                 const originalText = btn.innerText;
                 btn.innerText = "Guardando...";
@@ -1114,13 +1779,15 @@
                     if (currentEditId) result = await _supabase.from(tableName).update(entry).eq('id', currentEditId);
                     else result = await _supabase.from(tableName).insert([entry]);
 
-                    if (result.error) alert('Error al guardar: ' + result.error.message);
-                    else {
+                    if (result.error) {
+                        showToast('Error al guardar: ' + result.error.message, 'error');
+                    } else {
+                        showToast(currentEditId ? 'Registro actualizado correctamente' : 'Registro creado exitosamente', 'success');
                         window.closeModal();
                         loadData();
                     }
                 } catch (err) {
-                    alert('Error en la operación: ' + err.message);
+                    showToast('Error en la operación: ' + err.message, 'error');
                 } finally {
                     btn.innerText = originalText;
                     btn.disabled = false;

@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 
 <body>
@@ -99,6 +100,9 @@
             <button class="btn-logout" title="Cerrar Sesión">
                 <i class="bi bi-box-arrow-right"></i>
             </button>
+            <button class="btn-darkmode" id="darkModeBtn" title="Modo oscuro" onclick="toggleDarkMode()">
+                <i class="bi bi-moon"></i>
+            </button>
         </div>
     </header>
 
@@ -110,6 +114,7 @@
                 <div class="action-buttons" style="display: flex; gap: 0.5rem; align-items: center;">
                     <input type="date" id="exportDate" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; outline: none; font-family: inherit; color: var(--text);">
                     <button class="btn btn-secondary" onclick="exportDailyExcel()"><i class="bi bi-file-earmark-excel"></i> Exportar</button>
+                    <button class="btn btn-secondary" id="btnFichaPDF" onclick="exportFichaPDF()"><i class="bi bi-file-pdf"></i> Ficha PDF</button>
                     <button class="btn btn-primary" onclick="openModal()"><i class="bi bi-plus-lg"></i> Agregar
                         Registro</button>
                 </div>
@@ -163,6 +168,16 @@
             </div>
 
             <div class="pagination">
+                <div class="page-size-wrap">
+                    Mostrar
+                    <select id="pageSizeSelect">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    por página
+                </div>
                 <div class="page-info" id="pageInfo">Página 1 de 1</div>
                 <div class="page-controls">
                     <button class="btn btn-secondary" id="prevPageBtn">Anterior</button>
@@ -193,7 +208,41 @@
     </div>
 
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- PDF Preview Overlay -->
+    <div id="pdfPreviewOverlay" class="pdf-preview-overlay">
+        <div class="pdf-preview-header">
+            <div class="pdf-preview-title">
+                <i class="bi bi-file-earmark-pdf"></i>
+                <span id="pdfPreviewTitle">Previsualización de Ficha</span>
+            </div>
+            <div class="pdf-preview-actions">
+                <button type="button" class="btn btn-primary btn-download-pdf" onclick="downloadCurrentPdf()">
+                    <i class="bi bi-download"></i> Descargar PDF
+                </button>
+                <button type="button" class="btn btn-secondary btn-close-preview" onclick="closePdfPreview()">
+                    <i class="bi bi-x-lg"></i> Cerrar
+                </button>
+            </div>
+        </div>
+        <iframe id="pdfPreviewIframe" title="Previsualización PDF"></iframe>
+    </div>
     <script src="app.js"></script>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirmOverlay">
+        <div class="confirm-box">
+            <div class="confirm-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <h3 id="confirmTitle">¿Confirmar acción?</h3>
+            <p id="confirmMessage">Esta acción no se puede deshacer.</p>
+            <div class="confirm-actions">
+                <button type="button" class="btn btn-secondary" id="confirmCancelBtn">Cancelar</button>
+                <button type="button" class="btn" id="confirmOkBtn">Eliminar</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
