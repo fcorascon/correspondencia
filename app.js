@@ -865,7 +865,8 @@
 
         let details = '';
         schemas[currentSection].forEach(field => {
-            const val = getItemValue(item, field.id);
+            const rawVal = getItemValue(item, field.id);
+            const val = (typeof rawVal === 'string') ? rawVal.trim() : rawVal;
             let content;
             if (field.type === 'file') {
                 content = renderFileLinks(val);
@@ -874,14 +875,7 @@
             } else {
                 content = escapeHTML(val || 'N/A');
             }
-            details += `
-                <div class="form-group ${field.full ? 'full' : ''}">
-                    <label>${escapeHTML(field.name)}</label>
-                    <div class="detail-value-box">
-                        ${content}
-                    </div>
-                </div>
-            `;
+            details += `<div class="form-group ${field.full ? 'full' : ''}"><label>${escapeHTML(field.name)}</label><div class="detail-value-box">${content}</div></div>`;
         });
 
         const overlay = document.getElementById('modalOverlay');

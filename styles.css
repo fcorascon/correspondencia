@@ -657,16 +657,18 @@ label {
 }
 
 .detail-value-box {
-    padding: 0.625rem 0.875rem;
+    padding: 0.75rem 1rem;
     background: #F9FAFB;
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 0.875rem;
     color: var(--text-main);
     word-break: break-word;
-    white-space: pre-wrap;
-    text-align: left;
+    white-space: pre-line;
+    text-align: left !important;
     line-height: 1.5;
+    min-height: 42px;
+    display: block;
 }
 
 input,
