@@ -143,12 +143,12 @@
         </div>
 
         <div class="table-container">
-            <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                <div class="table-filters" id="tableFilters" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <div class="table-header">
+                <div class="table-filters" id="tableFilters">
                     <button class="filter-btn active">Ver todos</button>
                     <button class="filter-btn">Recientes</button>
                     <button class="filter-btn">Archivados</button>
-                    <select id="yearFilter" style="padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; color: #344054; background: white; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; outline: none;">
+                    <select id="yearFilter">
                         <option value="">Todos los Años</option>
                         <option value="2024">2024</option>
                         <option value="2025">2025</option>
@@ -159,10 +159,13 @@
                         <option value="2030">2030</option>
                     </select>
                 </div>
-                <div class="table-search" style="position: relative; min-width: 260px; max-width: 380px; flex: 1;">
-                    <i class="bi bi-search" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.875rem;"></i>
-                    <input type="text" id="tableSearchInput" placeholder="Buscar por año, dependencia, dictamen..." style="width: 100%; padding: 0.5rem 1rem 0.5rem 2.3rem; font-size: 0.875rem; border: 1px solid var(--border); border-radius: 8px; outline: none; background: white; color: var(--text-main);">
+                <div class="table-search-center">
+                    <div class="table-search">
+                        <i class="bi bi-search"></i>
+                        <input type="text" id="tableSearchInput" placeholder="Buscar registros...">
+                    </div>
                 </div>
+                <div class="table-header-spacer"></div>
             </div>
 
             <div id="dataGrid">

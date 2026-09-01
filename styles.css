@@ -314,14 +314,74 @@ main {
 .table-header {
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
+    gap: 1rem;
 }
 
 .table-filters {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+#yearFilter {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #344054;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    outline: none;
+    width: auto;
+}
+
+.table-search-center {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.table-search {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+}
+
+.table-search input {
+    width: 100%;
+    padding: 0.6rem 1rem 0.6rem 2.5rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    background: white;
+    color: var(--text-main);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+}
+
+.table-search input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(14, 55, 215, 0.1);
+}
+
+.table-search i {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+
+.table-header-spacer {
+    min-width: 1px;
 }
 
 .filter-btn {
@@ -1250,43 +1310,86 @@ input[type="file"]::file-selector-button {
 }
 
 /* ================================================
-   TOAST NOTIFICATIONS
+   TOAST NOTIFICATIONS (CENTRO - CENTRO)
    ================================================ */
 #toastContainer {
     position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    z-index: 9000;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
     display: flex;
     flex-direction: column;
-    gap: 0.625rem;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
     pointer-events: none;
-    max-width: 400px;
+    width: 90%;
+    max-width: 540px;
 }
+
 .toast {
     display: flex;
     align-items: center;
-    gap: 0.875rem;
-    padding: 0.875rem 1.125rem;
-    border-radius: 10px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    min-width: 260px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    justify-content: center;
+    text-align: center;
+    gap: 1.25rem;
+    padding: 1.4rem 2.2rem;
+    border-radius: 16px;
+    font-size: 1.15rem;
+    font-weight: 600;
+    min-width: 320px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.4), 0 12px 28px -5px rgba(0, 0, 0, 0.25);
     pointer-events: all;
-    animation: toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    animation: toastCenterIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     color: white;
     cursor: pointer;
-    line-height: 1.4;
+    line-height: 1.45;
+    border: 1px solid rgba(255, 255, 255, 0.25);
 }
-.toast.toast-success { background: #027A48; }
-.toast.toast-error   { background: #B42318; }
-.toast.toast-warning { background: #B54708; }
-.toast.toast-info    { background: var(--primary); }
-.toast.toast-exit    { animation: toastOut 0.28s ease forwards; }
-.toast i { font-size: 1.1rem; flex-shrink: 0; }
-@keyframes toastIn  { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes toastOut { from { transform: translateX(0);    opacity: 1; } to { transform: translateX(110%); opacity: 0; } }
+
+.toast.toast-success { 
+    background: linear-gradient(135deg, #027A48, #059669); 
+    box-shadow: 0 20px 50px -10px rgba(2, 122, 72, 0.5);
+}
+.toast.toast-error { 
+    background: linear-gradient(135deg, #B42318, #DC2626); 
+    box-shadow: 0 20px 50px -10px rgba(180, 35, 24, 0.5);
+}
+.toast.toast-warning { 
+    background: linear-gradient(135deg, #B54708, #D97706); 
+    box-shadow: 0 20px 50px -10px rgba(181, 71, 8, 0.5);
+}
+.toast.toast-info { 
+    background: linear-gradient(135deg, #0e37d7, #2563EB); 
+    box-shadow: 0 20px 50px -10px rgba(14, 55, 215, 0.5);
+}
+
+.toast.toast-exit { 
+    animation: toastCenterOut 0.25s ease forwards; 
+}
+
+.toast i { 
+    font-size: 2.2rem; 
+    flex-shrink: 0; 
+}
+
+.toast span {
+    flex: 1;
+    word-break: break-word;
+}
+
+@keyframes toastCenterIn { 
+    0% { transform: scale(0.75); opacity: 0; } 
+    100% { transform: scale(1); opacity: 1; } 
+}
+
+@keyframes toastCenterOut { 
+    0% { transform: scale(1); opacity: 1; } 
+    100% { transform: scale(0.8); opacity: 0; } 
+}
 
 /* ================================================
    CUSTOM CONFIRM DIALOG
