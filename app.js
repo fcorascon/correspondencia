@@ -877,7 +877,7 @@
             details += `
                 <div class="form-group ${field.full ? 'full' : ''}">
                     <label>${escapeHTML(field.name)}</label>
-                    <div style="padding: 0.625rem; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; word-break: break-word; white-space: pre-wrap; text-align: left;">
+                    <div class="detail-value-box">
                         ${content}
                     </div>
                 </div>
