@@ -617,7 +617,7 @@
             headerHtml += '<th style="width: 50px;">Ficha</th>';
         } else {
             headerHtml += '<th style="width: 110px;">Acciones</th>';
-            headerHtml += getSortHeader('_title', 'Registro / Asunto');
+            headerHtml += getSortHeader('_title', currentSection === 'proposiciones' ? 'Objetivo' : 'Registro / Asunto');
             headerHtml += `<th>${currentSection === 'recibida' ? 'RECIBIÓ' : 'Detalle Principal'}</th>`;
             headerHtml += '<th>Estado / Meta</th>';
             headerHtml += '<th>Archivo</th>';
@@ -727,7 +727,7 @@
                 }
                 else if (currentSection === 'proposiciones') {
                     titleVal = `Proposición #${item.id || ''}`;
-                    subtitleVal = getItemValue(item, 'proposicion');
+                    subtitleVal = getItemValue(item, 'objetivo');
                     detailVal = getItemValue(item, 'tipo') || 'N/A';
                     metaHtml = `<span class="badge badge-info">${escapeHTML(formatDateDMY(getItemValue(item, 'fecha_pleno')) || 'PLENO')}</span>`;
                     fileHtml = renderFileLinks(getItemValue(item, 'pdf_foto'));
