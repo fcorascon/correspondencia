@@ -1710,7 +1710,8 @@ input.invalid, select.invalid, textarea.invalid {
 /* ================================================
    DARK MODE TOGGLE BUTTON
    ================================================ */
-.btn-darkmode {
+.btn-darkmode,
+.btn-config {
     padding: 0.5rem;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -1727,6 +1728,7 @@ input.invalid, select.invalid, textarea.invalid {
     flex-shrink: 0;
 }
 .btn-darkmode:hover { background: var(--primary-light); color: var(--primary); }
+.btn-config:hover { background: #ECFDF5; color: #059669; border-color: #A7F3D0; }
 
 /* ================================================
    DARK MODE THEME
@@ -1768,8 +1770,10 @@ body.dark-mode .detail-value-box,
 body.dark-mode .form-group > div[style] { background: #0F172A !important; border-color: var(--border) !important; color: var(--text-main) !important; }
 body.dark-mode .login-box { background: #1E293B; border-color: var(--border); }
 body.dark-mode .btn-logout { background: #1E293B; }
-body.dark-mode .btn-darkmode { background: #1E293B; color: #CBD5E0; border-color: var(--border); }
+body.dark-mode .btn-darkmode,
+body.dark-mode .btn-config { background: #1E293B; color: #CBD5E0; border-color: var(--border); }
 body.dark-mode .btn-darkmode:hover { background: rgba(14,55,215,0.2); color: #93C5FD; }
+body.dark-mode .btn-config:hover { background: rgba(16,185,129,0.2); color: #6EE7B7; }
 body.dark-mode mark.hl { background: rgba(255,243,176,0.15); color: #FCD34D; }
 body.dark-mode .skeleton { background: linear-gradient(90deg, #1E293B 25%, #273549 50%, #1E293B 75%); background-size: 200% 100%; }
 body.dark-mode #exportDate,

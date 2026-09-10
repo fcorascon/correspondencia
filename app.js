@@ -1,7 +1,5 @@
 (function () {
-    const SUPABASE_URL = "https://ehsbhaepkknxdpvcttaz.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_wpFKOfWfFJ4jb9NIEJ4_qQ__c1H3mIh";
-    let _supabase;
+    let GOOGLE_SCRIPT_URL = localStorage.getItem('googleScriptUrl') || 'https://script.google.com/macros/s/AKfycbxdj2hCcliJt_YplYhOuEcENinLkunUXflVHGsLa14OsILur_4GTteApNnd7HP4O2c1/exec';
 
     let currentSection = 'recibida';
     let currentEditId = null;
@@ -322,68 +320,165 @@
         if (btn) btn.innerHTML = isDark ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
     };
 
-    function initSupabase() {
-        if (typeof supabase === 'undefined') return false;
-        try {
-            _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            return true;
-        } catch (e) {
-            return false;
+    // ================================================
+    // GOOGLE APPS SCRIPT API CLIENT
+    // ================================================
+    async function apiRequest(action, data = {}, method = 'GET') {
+        const scriptUrl = (GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || '').trim();
+        if (!scriptUrl) {
+            throw new Error('La URL de Google Apps Script no está configurada.');
+        }
+
+        if (method === 'GET') {
+            const url = new URL(scriptUrl);
+            url.searchParams.set('action', action);
+            for (const [key, val] of Object.entries(data)) {
+                if (val !== undefined && val !== null) {
+                    url.searchParams.set(key, val);
+                }
+            }
+            const res = await fetch(url.toString(), {
+                method: 'GET',
+                redirect: 'follow'
+            });
+            if (!res.ok) throw new Error(`Error en servidor (HTTP ${res.status})`);
+            return await res.json();
+        } else {
+            const payload = { action, ...data };
+            const res = await fetch(scriptUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload),
+                redirect: 'follow'
+            });
+            if (!res.ok) throw new Error(`Error en servidor (HTTP ${res.status})`);
+            return await res.json();
         }
     }
 
-    async function fetchAutorizados() {
-        if (!_supabase && !initSupabase()) {
-            console.error('Supabase no inicializado para fetchAutorizados');
+    // ================================================
+    // CONFIGURACIÓN GOOGLE SHEETS
+    // ================================================
+    window.openConfigModal = function () {
+        const overlay = document.getElementById('configOverlay');
+        const input = document.getElementById('configScriptUrl');
+        const msg = document.getElementById('configStatusMsg');
+        if (input) input.value = GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || '';
+        if (msg) msg.style.display = 'none';
+        if (overlay) overlay.classList.add('active');
+    };
+
+    window.closeConfigModal = function () {
+        const overlay = document.getElementById('configOverlay');
+        if (overlay) overlay.classList.remove('active');
+    };
+
+    window.saveScriptConfig = async function () {
+        const input = document.getElementById('configScriptUrl');
+        const url = (input ? input.value : '').trim();
+        if (!url) {
+            showToast('Ingresa una URL válida de Apps Script.', 'warning');
             return;
         }
-        try {
-            console.log('Iniciando fetch de autorizados...');
-            const { data, error } = await _supabase.from('autorizados').select('nombre');
-            if (error) {
-                console.error('Error en Supabase (autorizados):', error.message);
-                return;
-            }
-            if (!data || data.length === 0) {
-                console.warn('La tabla autorizados está vacía o no devolvió datos.');
-                return;
-            }
-            autorizadosData = (data || []).map(d => d.nombre ? d.nombre.toString().toUpperCase().trim() : '').filter(Boolean);
-            console.log('Autorizados cargados exitosamente:', autorizadosData);
-        } catch (e) {
-            console.error('Excepción crítica en fetchAutorizados:', e);
-        }
-    }
 
-    async function fetchStatuses() {
-        if (!_supabase && !initSupabase()) return;
-        try {
-            console.log('Iniciando fetch de estatus...');
-            const { data, error } = await _supabase.from('status').select('status');
-            if (error) {
-                console.error('Error en Supabase (status):', error.message);
-                return;
-            }
-            statusesData = (data || []).map(d => d.status ? d.status.toString().toUpperCase().trim() : '').filter(Boolean);
-            console.log('Estatus cargados:', statusesData.length);
-        } catch (e) {
-            console.error('Excepción en fetchStatuses:', e);
-        }
-    }
+        GOOGLE_SCRIPT_URL = url;
+        localStorage.setItem('googleScriptUrl', url);
+        showToast('URL de Google Sheets guardada.', 'success');
+        window.closeConfigModal();
 
-    async function fetchTipos() {
-        if (!_supabase && !initSupabase()) return;
-        try {
-            console.log('Iniciando fetch de tipos...');
-            const { data, error } = await _supabase.from('tipo').select('tipo');
-            if (error) {
-                console.error('Error en Supabase (tipo):', error.message);
-                return;
+        // Recargar datos y catálogos
+        await fetchCatalogs();
+        loadData();
+    };
+
+    window.testScriptConnection = async function () {
+        const input = document.getElementById('configScriptUrl');
+        const msg = document.getElementById('configStatusMsg');
+        const btn = document.getElementById('btnTestConfig');
+        const url = (input ? input.value : '').trim();
+
+        if (!url) {
+            if (msg) {
+                msg.style.display = 'block';
+                msg.style.background = '#FEF2F2';
+                msg.style.color = '#B91C1C';
+                msg.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Por favor ingresa una URL primero.';
             }
-            tiposData = (data || []).map(d => d.tipo ? d.tipo.toString().toUpperCase().trim() : '').filter(Boolean);
-            console.log('Tipos cargados:', tiposData.length);
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Probando...';
+        }
+
+        try {
+            const testUrl = new URL(url);
+            testUrl.searchParams.set('action', 'init');
+            const res = await fetch(testUrl.toString(), { method: 'GET', redirect: 'follow' });
+            const data = await res.json();
+
+            if (data && data.success) {
+                if (msg) {
+                    msg.style.display = 'block';
+                    msg.style.background = '#ECFDF5';
+                    msg.style.color = '#047857';
+                    msg.innerHTML = '<i class="bi bi-check-circle-fill"></i> Conexión exitosa con Google Sheets.';
+                }
+            } else {
+                throw new Error(data?.error || 'Respuesta no válida del script');
+            }
+        } catch (err) {
+            if (msg) {
+                msg.style.display = 'block';
+                msg.style.background = '#FEF2F2';
+                msg.style.color = '#B91C1C';
+                msg.innerHTML = `<i class="bi bi-x-circle-fill"></i> Error de conexión: ${escapeHTML(err.message)}`;
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Probar Conexión';
+            }
+        }
+    };
+
+    async function fetchCatalogs() {
+        if (!GOOGLE_SCRIPT_URL) return;
+        try {
+            console.log('Cargando catálogos desde Google Sheets...');
+            const [autRes, statRes, tipoRes] = await Promise.all([
+                apiRequest('read', { table: 'autorizados' }).catch(() => null),
+                apiRequest('read', { table: 'status' }).catch(() => null),
+                apiRequest('read', { table: 'tipo' }).catch(() => null)
+            ]);
+
+            if (autRes && autRes.success && Array.isArray(autRes.data)) {
+                autorizadosData = autRes.data
+                    .map(d => d.nombre || d.autorizado || Object.values(d)[1] || Object.values(d)[0])
+                    .filter(Boolean)
+                    .map(s => String(s).trim().toUpperCase());
+            }
+            if (statRes && statRes.success && Array.isArray(statRes.data)) {
+                statusesData = statRes.data
+                    .map(d => d.status || Object.values(d)[1] || Object.values(d)[0])
+                    .filter(Boolean)
+                    .map(s => String(s).trim().toUpperCase());
+            }
+            if (tipoRes && tipoRes.success && Array.isArray(tipoRes.data)) {
+                tiposData = tipoRes.data
+                    .map(d => d.tipo || Object.values(d)[1] || Object.values(d)[0])
+                    .filter(Boolean)
+                    .map(s => String(s).trim().toUpperCase());
+            }
+
+            console.log('Catálogos cargados:', {
+                autorizados: autorizadosData.length,
+                statuses: statusesData.length,
+                tipos: tiposData.length
+            });
         } catch (e) {
-            console.error('Excepción en fetchTipos:', e);
+            console.error('Error al cargar catálogos:', e);
         }
     }
 
@@ -391,16 +486,17 @@
         if (window._appInitialized) return;
         window._appInitialized = true;
 
-        console.log('Iniciando aplicación...');
-        if (!initSupabase()) return;
+        console.log('Iniciando aplicación con Google Sheets...');
+        if (!GOOGLE_SCRIPT_URL) {
+            console.warn('URL de Google Apps Script no configurada.');
+            window.openConfigModal();
+            return;
+        }
 
-        // Cargamos nombres y datos en paralelo para velocidad
-        await Promise.all([
-            fetchAutorizados(),
-            fetchStatuses(),
-            fetchTipos(),
-            checkSession() ? loadData() : Promise.resolve()
-        ]);
+        await fetchCatalogs();
+        if (checkSession()) {
+            await loadData();
+        }
     }
 
     function getTableName(section) {
@@ -411,44 +507,64 @@
     async function loadData() {
         renderSkeletonGrid();
 
-        if (!_supabase && !initSupabase()) return;
-
-        const tableName = getTableName(currentSection);
-        let query = _supabase
-            .from(tableName)
-            .select('*')
-            .order('id', { ascending: false });
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error:', error);
+        if (!GOOGLE_SCRIPT_URL) {
             const grid = document.getElementById('dataGrid');
-            if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso a "${escapeHTML(currentSection)}": ${escapeHTML(error.message)}</div>`;
-            showToast(`Error al cargar datos: ${error.message}`, 'error');
+            if (grid) {
+                grid.innerHTML = `
+                    <div style="text-align: center; padding: 3rem 1.5rem;">
+                        <i class="bi bi-file-earmark-spreadsheet" style="font-size: 3rem; color: #0F9D58; display: block; margin-bottom: 1rem;"></i>
+                        <h3 style="margin-bottom: 0.5rem;">Configuración requerida</h3>
+                        <p style="color: var(--text-muted); max-width: 480px; margin: 0 auto 1.5rem auto; font-size: 0.9rem; line-height: 1.5;">
+                            Ingresa la URL de tu Google Apps Script implementado como Aplicación Web para conectar con Google Sheets.
+                        </p>
+                        <button type="button" class="btn btn-primary" onclick="openConfigModal()">
+                            <i class="bi bi-gear"></i> Configurar Conexión
+                        </button>
+                    </div>`;
+            }
             return;
         }
 
-        allData = data || [];
+        const tableName = getTableName(currentSection);
 
-        if (currentSection === 'recibida' || currentSection === 'despachada' || currentSection === 'fiscalizacion') {
-            const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : (currentSection === 'despachada' ? 'Fecha' : 'fecha_sesion');
-            allData.sort((a, b) => {
-                const rawDateA = getItemValue(a, dateField) || getItemValue(a, 'ano');
-                const rawDateB = getItemValue(b, dateField) || getItemValue(b, 'ano');
-                const dateA = parseDate(rawDateA)?.getTime() || 0;
-                const dateB = parseDate(rawDateB)?.getTime() || 0;
-                if (dateB === dateA) {
-                    return (b.id || 0) - (a.id || 0);
-                }
-                return dateB - dateA;
-            });
+        try {
+            const res = await apiRequest('read', { table: tableName });
+
+            if (!res || !res.success) {
+                const errMsg = res?.error || 'Error al conectar con la hoja de cálculo';
+                console.error('Error en loadData:', errMsg);
+                const grid = document.getElementById('dataGrid');
+                if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso a "${escapeHTML(currentSection)}": ${escapeHTML(errMsg)}</div>`;
+                showToast(`Error al cargar datos: ${errMsg}`, 'error');
+                return;
+            }
+
+            allData = res.data || [];
+
+            if (currentSection === 'recibida' || currentSection === 'despachada' || currentSection === 'fiscalizacion') {
+                const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : (currentSection === 'despachada' ? 'Fecha' : 'fecha_sesion');
+                allData.sort((a, b) => {
+                    const rawDateA = getItemValue(a, dateField) || getItemValue(a, 'ano');
+                    const rawDateB = getItemValue(b, dateField) || getItemValue(b, 'ano');
+                    const dateA = parseDate(rawDateA)?.getTime() || 0;
+                    const dateB = parseDate(rawDateB)?.getTime() || 0;
+                    if (dateB === dateA) {
+                        return (b.id || 0) - (a.id || 0);
+                    }
+                    return dateB - dateA;
+                });
+            }
+
+            populateYearFilter(allData);
+            updateStats(allData);
+            currentPage = 1;
+            applyFiltersAndRender(true);
+        } catch (error) {
+            console.error('Excepción al cargar datos:', error);
+            const grid = document.getElementById('dataGrid');
+            if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de conexión con Google Sheets: ${escapeHTML(error.message)}</div>`;
+            showToast(`Error al cargar datos: ${error.message}`, 'error');
         }
-
-        populateYearFilter(allData);
-        updateStats(allData);
-        currentPage = 1;
-        applyFiltersAndRender(true);
     }
 
     function updateStats(data) {
@@ -507,6 +623,19 @@
         if (stats.length >= 4) stats[3].innerText = urgentesCount.toLocaleString();
     }
 
+    function formatDriveUrl(url) {
+        if (!url || typeof url !== 'string') return url;
+        const trimmed = url.trim();
+        // Si es un enlace de Google Drive (uc?export=view o export=download), convertir a /file/d/.../view
+        const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                      trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+                      trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            return `https://drive.google.com/file/d/${match[1]}/view?usp=sharing`;
+        }
+        return trimmed;
+    }
+
     function renderFileLinks(val) {
         if (!val) return '-';
         let urls = [];
@@ -521,31 +650,47 @@
         const validLinks = urls
             .filter(url => typeof url === 'string' && url.trim() !== '')
             .map((url, i) => {
-                const safeUrl = encodeURI(url.trim());
-                return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-link" title="Archivo ${i + 1}"><i class="bi bi-file-earmark-arrow-down"></i>${urls.length > 1 ? (i + 1) : ''}</a>`;
+                const safeUrl = formatDriveUrl(url);
+                return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-link" title="Abrir archivo ${i + 1}"><i class="bi bi-file-earmark-arrow-down"></i>${urls.length > 1 ? (i + 1) : ''}</a>`;
             });
 
         return validLinks.length > 0 ? validLinks.join(' ') : '-';
     }
 
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = reader.result;
+                const base64 = typeof result === 'string' && result.includes(',') ? result.split(',')[1] : result;
+                resolve(base64);
+            };
+            reader.onerror = err => reject(err);
+            reader.readAsDataURL(file);
+        });
+    }
+
     async function uploadFiles(files, limit = 10) {
         if (!files || files.length === 0) return null;
+        if (!GOOGLE_SCRIPT_URL) {
+            showToast('Configura la URL de Google Apps Script para guardar archivos.', 'warning');
+            return null;
+        }
+
         const uploadPromises = Array.from(files).slice(0, limit).map(async (file) => {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-            const filePath = `${currentSection}/${fileName}`;
+            const base64 = await fileToBase64(file);
+            const res = await apiRequest('upload', {
+                filename: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                base64: base64,
+                section: currentSection
+            }, 'POST');
 
-            const { data, error } = await _supabase.storage
-                .from('attachments')
-                .upload(filePath, file);
+            if (!res || !res.success) {
+                throw new Error(res?.error || 'Error al guardar archivo en Google Drive');
+            }
 
-            if (error) throw error;
-
-            const { data: { publicUrl } } = _supabase.storage
-                .from('attachments')
-                .getPublicUrl(filePath);
-
-            return publicUrl;
+            return res.publicUrl || res.viewUrl;
         });
 
         const urls = await Promise.all(uploadPromises);
@@ -968,12 +1113,16 @@
         if (!confirmed) return;
 
         const tableName = getTableName(currentSection);
-        const { error } = await _supabase.from(tableName).delete().eq('id', id);
-        if (error) {
-            showToast('Error al borrar: ' + error.message, 'error');
-        } else {
-            showToast('Registro eliminado exitosamente', 'success');
-            loadData();
+        try {
+            const res = await apiRequest('delete', { table: tableName, id: id }, 'POST');
+            if (res && res.success) {
+                showToast('Registro eliminado exitosamente', 'success');
+                loadData();
+            } else {
+                showToast('Error al borrar: ' + (res?.error || 'Error desconocido'), 'error');
+            }
+        } catch (err) {
+            showToast('Error de conexión: ' + err.message, 'error');
         }
     };
 
@@ -1670,25 +1819,66 @@ function checkSession() {
                 const pass = document.getElementById('loginPass').value;
                 const errorMsg = document.getElementById('loginError');
 
-                if (!_supabase && !initSupabase()) return;
+                if (!GOOGLE_SCRIPT_URL) {
+                    window.openConfigModal();
+                    return;
+                }
 
-                const { data, error } = await _supabase
-                    .from('usuarios')
-                    .select('*')
-                    .eq('usuario', user)
-                    .eq('contrasena', pass)
-                    .single();
+                try {
+                    let authenticated = false;
+                    let foundUser = null;
 
-                if (data) {
-                    localStorage.setItem('loggedUser', user.toUpperCase());
-                    localStorage.setItem('loggedUserRole', data.rol ? String(data.rol).toLowerCase() : 'usuario');
-                    document.getElementById('loginOverlay').style.display = 'none';
-                    document.querySelector('.user-name').innerText = user.toUpperCase();
-                    document.querySelector('.user-role').innerText = (String(data.rol) === 'admin' || String(data.rol) === '1') ? 'Administrador' : 'Usuario';
-                    showToast(`¡Bienvenido, ${user.toUpperCase()}!`, 'success');
-                    loadData();
-                } else {
-                    errorMsg.style.display = 'block';
+                    try {
+                        const usersRes = await apiRequest('read', { table: 'usuarios' });
+                        if (usersRes && usersRes.success && Array.isArray(usersRes.data)) {
+                            const match = usersRes.data.find(u => {
+                                const uName = String(u.usuario || u.user || u.nombre || '').trim().toLowerCase();
+                                const uPass = String(u.contrasena || u.password || u.pass || '');
+                                return uName === user.toLowerCase() && uPass === pass;
+                            });
+                            if (match) {
+                                authenticated = true;
+                                foundUser = {
+                                    user: match.usuario || user,
+                                    rol: match.rol
+                                };
+                            }
+                        }
+                    } catch (readErr) {
+                        console.warn('Lectura de usuarios falló, probando POST login:', readErr);
+                    }
+
+                    if (!authenticated) {
+                        const res = await apiRequest('login', { user, pass }, 'POST');
+                        if (res && res.success) {
+                            authenticated = true;
+                            foundUser = res;
+                        } else {
+                            if (errorMsg) {
+                                errorMsg.innerText = res?.error || 'Usuario o contraseña incorrectos';
+                                errorMsg.style.display = 'block';
+                            }
+                            return;
+                        }
+                    }
+
+                    if (authenticated && foundUser) {
+                        const loggedUser = (foundUser.user || user).toUpperCase();
+                        const role = foundUser.rol ? String(foundUser.rol).toLowerCase() : 'usuario';
+                        localStorage.setItem('loggedUser', loggedUser);
+                        localStorage.setItem('loggedUserRole', role);
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.querySelector('.user-name').innerText = loggedUser;
+                        document.querySelector('.user-role').innerText = (role === 'admin' || role === '1') ? 'Administrador' : 'Usuario';
+                        showToast(`¡Bienvenido, ${loggedUser}!`, 'success');
+                        await fetchCatalogs();
+                        loadData();
+                    }
+                } catch (err) {
+                    if (errorMsg) {
+                        errorMsg.innerText = 'Error al verificar credenciales: ' + err.message;
+                        errorMsg.style.display = 'block';
+                    }
                 }
             };
         }
@@ -1895,15 +2085,22 @@ function checkSession() {
                         }
                     }
 
-                    if (!_supabase && !initSupabase()) return;
+                    if (!GOOGLE_SCRIPT_URL) {
+                        showToast('Configura la URL de Google Apps Script antes de guardar.', 'warning');
+                        window.openConfigModal();
+                        return;
+                    }
 
                     const tableName = getTableName(currentSection);
                     let result;
-                    if (currentEditId) result = await _supabase.from(tableName).update(entry).eq('id', currentEditId);
-                    else result = await _supabase.from(tableName).insert([entry]);
+                    if (currentEditId) {
+                        result = await apiRequest('update', { table: tableName, id: currentEditId, data: entry }, 'POST');
+                    } else {
+                        result = await apiRequest('create', { table: tableName, data: entry }, 'POST');
+                    }
 
-                    if (result.error) {
-                        showToast('Error al guardar: ' + result.error.message, 'error');
+                    if (!result || !result.success) {
+                        showToast('Error al guardar: ' + (result?.error || 'Error desconocido'), 'error');
                     } else {
                         showToast(currentEditId ? 'Registro actualizado correctamente' : 'Registro creado exitosamente', 'success');
                         window.closeModal();
