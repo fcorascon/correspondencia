@@ -589,6 +589,7 @@
         const startIndex = (currentPage - 1) * pageSize;
         const pageData = sortedData.slice(startIndex, startIndex + pageSize);
 
+        // ── DESKTOP TABLE ──────────────────────────────────────────
         const table = document.createElement('table');
         table.className = 'data-table';
 
@@ -626,9 +627,24 @@
         table.innerHTML = headerHtml;
 
         const tbody = document.createElement('tbody');
+
+        // ── MOBILE CARDS ───────────────────────────────────────────
+        const mobileCards = document.createElement('div');
+        mobileCards.className = 'mobile-cards';
+
         pageData.forEach(item => {
             const tr = document.createElement('tr');
             const rowId = item.id;
+
+            // --- helpers shared by both views ---
+            const getBadge = (val) => {
+                const v = String(val).toUpperCase();
+                if (v.includes('FAVOR')) return `<span class="badge badge-success">${escapeHTML(val)}</span>`;
+                if (v.includes('CONTRA')) return `<span class="badge" style="background:#FEF3F2; color:#B42318;">${escapeHTML(val)}</span>`;
+                if (v.includes('NO VOTO') || v === 'NO VOTO') return `<span class="badge" style="background:#F2F4F7; color:#667085;">${escapeHTML(val)}</span>`;
+                if (v.includes('ABST')) return `<span class="badge badge-warning">${escapeHTML(val)}</span>`;
+                return `<span style="color: var(--text-muted);">${escapeHTML(val)}</span>`;
+            };
 
             if (currentSection === 'fiscalizacion') {
                 const ano = getItemValue(item, 'ano') || '2024';
@@ -651,17 +667,9 @@
                 }
                 if (!votoFinal) votoFinal = votoDiputada;
 
-                const getBadge = (val) => {
-                    const v = String(val).toUpperCase();
-                    if (v.includes('FAVOR')) return `<span class="badge badge-success">${escapeHTML(val)}</span>`;
-                    if (v.includes('CONTRA')) return `<span class="badge" style="background:#FEF3F2; color:#B42318;">${escapeHTML(val)}</span>`;
-                    if (v.includes('NO VOTO') || v === 'NO VOTO') return `<span class="badge" style="background:#F2F4F7; color:#667085;">${escapeHTML(val)}</span>`;
-                    if (v.includes('ABST')) return `<span class="badge badge-warning">${escapeHTML(val)}</span>`;
-                    return `<span style="color: var(--text-muted);">${escapeHTML(val)}</span>`;
-                };
-
                 const initialLetter = escapeHTML((dependencia || '?')[0].toUpperCase());
 
+                // Desktop table row
                 tr.innerHTML = `
                     <td class="action-cell" style="text-align: left; white-space: nowrap;">
                         <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
@@ -684,6 +692,32 @@
                     <td><span style="font-size: 0.875rem; font-weight: 500;">${highlightText(fallo, activeSearchTerm)}</span></td>
                     <td>${getBadge(votoFinal)}</td>
                 `;
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.innerHTML = `
+                    <div class="mobile-card-top">
+                        <div class="avatar" style="flex-shrink:0;">${initialLetter}</div>
+                        <div class="mobile-card-body">
+                            <div class="mobile-card-title">${highlightText(dependencia, activeSearchTerm)}</div>
+                            <div class="mobile-card-subtitle">Dict. ${escapeHTML(dictamenNo)} &nbsp;·&nbsp; ${escapeHTML(fechaSesion)}</div>
+                        </div>
+                        <div class="mobile-card-actions">
+                            <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver"></i>
+                            <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
+                            <i class="bi bi-trash action-icon" style="color:#D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                            <i class="bi bi-file-pdf action-icon-pdf" onclick="viewPDF(${rowId})" title="PDF"></i>
+                        </div>
+                    </div>
+                    <div class="mobile-card-meta">
+                        <span class="badge badge-info">${escapeHTML(String(ano))}</span>
+                        ${getBadge(votoDiputada)}
+                        ${escapeHTML(fallo) !== '—' ? `<span style="font-size:0.75rem;color:var(--text-muted);">${escapeHTML(fallo)}</span>` : ''}
+                    </div>
+                `;
+                mobileCards.appendChild(card);
+
             } else {
                 let titleVal = '';
                 let subtitleVal = '';
@@ -735,6 +769,7 @@
 
                 const initialLetter = escapeHTML((titleVal || '?')[0].toUpperCase());
 
+                // Desktop table row
                 tr.innerHTML = `
                     <td class="action-cell" style="text-align: left; white-space: nowrap;">
                         <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver detalles"></i>
@@ -761,6 +796,31 @@
                         ${fileHtml}
                     </td>
                 `;
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.innerHTML = `
+                    <div class="mobile-card-top">
+                        <div class="avatar" style="flex-shrink:0;">${initialLetter}</div>
+                        <div class="mobile-card-body">
+                            <div class="mobile-card-title">${highlightText(titleVal || 'Sin Título', activeSearchTerm)}</div>
+                            <div class="mobile-card-subtitle">${highlightText(subtitleVal || 'Sin descripción', activeSearchTerm)}</div>
+                        </div>
+                        <div class="mobile-card-actions">
+                            <i class="bi bi-eye action-icon" onclick="viewEntry(${rowId})" title="Ver"></i>
+                            <i class="bi bi-pencil action-icon" onclick="editEntry(${rowId})" title="Editar"></i>
+                            <i class="bi bi-trash action-icon" style="color:#D92D20;" onclick="deleteEntry(${rowId})" title="Eliminar"></i>
+                            <i class="bi bi-file-pdf action-icon-pdf" onclick="viewPDF(${rowId})" title="PDF"></i>
+                        </div>
+                    </div>
+                    <div class="mobile-card-meta">
+                        ${metaHtml}
+                        ${detailVal ? `<span style="font-size:0.75rem;color:var(--text-muted);">${escapeHTML(detailVal)}</span>` : ''}
+                        ${fileHtml && fileHtml !== '-' ? `<span>${fileHtml}</span>` : ''}
+                    </div>
+                `;
+                mobileCards.appendChild(card);
             }
 
             tbody.appendChild(tr);
@@ -768,7 +828,9 @@
 
         table.appendChild(tbody);
         grid.appendChild(table);
+        grid.appendChild(mobileCards);
     }
+
 
     function applyFiltersAndRender(resetPage = false) {
         let filtered = allData;

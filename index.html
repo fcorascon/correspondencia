@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Correspondencia | Mayola Gaona</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -113,7 +113,7 @@
         <div class="content-header">
             <div class="title-row">
                 <h1 id="sectionTitle">Recibida</h1>
-                <div class="action-buttons" style="display: flex; gap: 0.5rem; align-items: center;">
+                <div class="action-buttons">
                     <input type="date" id="exportDate" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; outline: none; font-family: inherit; color: var(--text);">
                     <button class="btn btn-secondary" onclick="exportDailyExcel()"><i class="bi bi-file-earmark-excel"></i> Exportar</button>
                     <button class="btn btn-secondary" id="btnFichaPDF" onclick="exportFichaPDF()"><i class="bi bi-file-pdf"></i> Ficha PDF</button>
