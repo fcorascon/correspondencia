@@ -1,2 +1,3 @@
 _fix*.py
 *.xlsx
+api/node_modules/
