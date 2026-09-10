@@ -1374,6 +1374,17 @@ input[type="file"]::file-selector-button {
         padding-bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
     }
 
+    #configOverlay .modal {
+        position: relative !important;
+        inset: auto !important;
+        width: 92% !important;
+        max-width: 480px !important;
+        height: auto !important;
+        max-height: 90vh !important;
+        border-radius: 12px !important;
+        margin: auto !important;
+    }
+
     .modal-overlay {
         align-items: flex-end;
     }
