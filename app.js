@@ -541,15 +541,22 @@
 
             allData = res.data || [];
 
-            if (currentSection === 'recibida' || currentSection === 'despachada' || currentSection === 'fiscalizacion') {
-                const dateField = currentSection === 'recibida' ? 'Fecha_Recibido' : (currentSection === 'despachada' ? 'Fecha' : 'fecha_sesion');
+            const dateFieldMap = {
+                recibida: 'Fecha_Recibido',
+                despachada: 'Fecha',
+                fiscalizacion: 'fecha_sesion',
+                iniciativas: 'fecha_oficio',
+                proposiciones: 'fecha_ingreso_procepar'
+            };
+            const dateField = dateFieldMap[currentSection];
+            if (dateField) {
                 allData.sort((a, b) => {
                     const rawDateA = getItemValue(a, dateField) || getItemValue(a, 'ano');
                     const rawDateB = getItemValue(b, dateField) || getItemValue(b, 'ano');
                     const dateA = parseDate(rawDateA)?.getTime() || 0;
                     const dateB = parseDate(rawDateB)?.getTime() || 0;
                     if (dateB === dateA) {
-                        return (b.id || 0) - (a.id || 0);
+                        return (Number(b.id) || 0) - (Number(a.id) || 0);
                     }
                     return dateB - dateA;
                 });
