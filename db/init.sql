@@ -1029,6 +1029,17 @@ RESULTADO 42: PADRÓN DE PROVEEDORES NO PUBLICADO EN EL PERIÓDICO OFICIAL DEL E
 RESULTADO 44: SEIS EXPEDIENTES DE PROVEEDORES SIN CONSTANCIA DE OPINIÓN DE CUMPLIMIENTO EN SENTIDO POSITIVO DEL SAT Y SEGURIDAD SOCIAL A LA FECHA DE CONTRATACIÓN, POR UN SALDO DE -$24,851,841. "', '"LA COMISIÓN ESTATAL DE SERVICIOS PÚBLICOS DE TIJUANA PRESENTA UNA SEGURIDAD RAZONABLE EN SU INFORMACIÓN FINANCIERA GENERAL Y UN AHORRO DEVENGADO DE $1,248,387,222; SIN EMBARGO, SUBSISTEN DEBILIDADES DE CONTROL INTERNO Y LEGALIDAD TRADUCIDAS EN 1 PROMOCIÓN DE RESPONSABILIDAD ADMINISTRATIVA SANCIONATORIA Y 5 RECOMENDACIONES NO SOLVENTADAS. 
 "', 'NO VOTO', '81 PUNTOS', '2026-09-08T20:09:39.53107+00:00', '7 A FAVOR');
 
+-- Advance identity sequences past the highest existing id so new inserts don't conflict
+SELECT setval(pg_get_serial_sequence('usuarios', 'id'), COALESCE((SELECT MAX(id) FROM usuarios), 1));
+SELECT setval(pg_get_serial_sequence('autorizados', 'id'), COALESCE((SELECT MAX(id) FROM autorizados), 1));
+SELECT setval(pg_get_serial_sequence('status', 'id'), COALESCE((SELECT MAX(id) FROM status), 1));
+SELECT setval(pg_get_serial_sequence('tipo', 'id'), COALESCE((SELECT MAX(id) FROM tipo), 1));
+SELECT setval(pg_get_serial_sequence('recibida', 'id'), COALESCE((SELECT MAX(id) FROM recibida), 1));
+SELECT setval(pg_get_serial_sequence('despachada', 'id'), COALESCE((SELECT MAX(id) FROM despachada), 1));
+SELECT setval(pg_get_serial_sequence('iniciativas', 'id'), COALESCE((SELECT MAX(id) FROM iniciativas), 1));
+SELECT setval(pg_get_serial_sequence('proposiciones', 'id'), COALESCE((SELECT MAX(id) FROM proposiciones), 1));
+SELECT setval(pg_get_serial_sequence('fisca', 'id'), COALESCE((SELECT MAX(id) FROM fisca), 1));
+
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon;
