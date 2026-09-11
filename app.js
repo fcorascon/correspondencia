@@ -1395,7 +1395,14 @@
             const row = {};
             schemas[currentSection].forEach(field => {
                 if (field.type !== 'file') {
-                    row[field.name] = getItemValue(item, field.id) || '';
+                    const raw = getItemValue(item, field.id);
+                    if (raw === undefined || raw === null || raw === '') {
+                        row[field.name] = '';
+                    } else if (field.type === 'date') {
+                        row[field.name] = formatDateDMY(raw);
+                    } else {
+                        row[field.name] = raw;
+                    }
                 }
             });
             return row;
@@ -1669,7 +1676,11 @@
 
             fields.forEach(field => {
                 const label = field.name;
-                let value = String(getItemValue(item, field.id) || '—');
+                const rawVal = getItemValue(item, field.id);
+                let value = '—';
+                if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+                    value = field.type === 'date' ? formatDateDMY(rawVal) : String(rawVal);
+                }
                 const labelWidth = 42;
                 const valueWidth = contentWidth - labelWidth - 4;
 
