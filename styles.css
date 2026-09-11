@@ -1798,8 +1798,11 @@ body.dark-mode .mobile-card:active { background: rgba(14,55,215,0.1); }
 /* ================================================
    MOBILE CARD VIEW - Only shows on mobile (hidden by default on desktop)
    ================================================ */
-.mobile-cards {
-    display: none; /* hidden on desktop, shown via media query above */
+/* Hide mobile cards on desktop (display:flex is enabled in @media max-width:768px above) */
+@media (min-width: 769px) {
+    .mobile-cards {
+        display: none !important;
+    }
 }
 
 /* Safe area padding for notched phones (applies on all screen sizes) */

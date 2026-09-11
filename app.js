@@ -245,6 +245,28 @@
             html += '</tr>';
         }
         html += '</tbody></table>';
+
+        // Skeleton view for mobile screens
+        html += '<div class="mobile-cards skeleton-mobile-cards">';
+        for (let k = 0; k < 5; k++) {
+            html += `
+                <div class="mobile-card" style="pointer-events: none;">
+                    <div class="mobile-card-top">
+                        <div class="skeleton" style="width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;"></div>
+                        <div class="mobile-card-body" style="display: flex; flex-direction: column; gap: 0.4rem;">
+                            <span class="skeleton skeleton-cell" style="width: 70%; height: 14px;"></span>
+                            <span class="skeleton skeleton-cell" style="width: 45%; height: 11px;"></span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-meta">
+                        <span class="skeleton skeleton-cell" style="width: 60px; height: 18px; border-radius: 9999px;"></span>
+                        <span class="skeleton skeleton-cell" style="width: 80px; height: 18px; border-radius: 9999px;"></span>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+
         grid.innerHTML = html;
     }
 
@@ -711,7 +733,8 @@
 
         const searchInput = document.getElementById('searchInput');
         const tableSearchInput = document.getElementById('tableSearchInput');
-        const activeSearchTerm = (searchInput?.value || tableSearchInput?.value || '').trim();
+        // Prioritize table search (always visible on mobile) over header search
+        const activeSearchTerm = ((tableSearchInput?.value || '').trim() || (searchInput?.value || '').trim());
 
         const sortedData = applySortToData(currentFilteredData);
         const totalItems = sortedData.length;
@@ -989,7 +1012,9 @@
 
         const searchInput = document.getElementById('searchInput');
         const tableSearchInput = document.getElementById('tableSearchInput');
-        const term = (searchInput?.value || tableSearchInput?.value || '').toLowerCase().trim();
+        // Use whichever search field has a value (table search takes priority on mobile)
+        const termRaw = (tableSearchInput?.value || '').trim() || (searchInput?.value || '').trim();
+        const term = termRaw.toLowerCase();
 
         if (term) {
             filtered = filtered.filter(item => {
@@ -1000,9 +1025,27 @@
         const yearFilter = document.getElementById('yearFilter');
         if (yearFilter && yearFilter.value) {
             const y = String(yearFilter.value).trim();
+            // Use the correct date field for the current section
+            const yearFieldMap = {
+                recibida: 'Fecha_Recibido',
+                despachada: 'Fecha',
+                fiscalizacion: 'ano',
+                iniciativas: 'fecha_oficio',
+                proposiciones: 'fecha_ingreso_procepar'
+            };
+            const yearField = yearFieldMap[currentSection];
             filtered = filtered.filter(item => {
-                const itemYear = String(getItemValue(item, 'ano') || getItemValue(item, 'fecha_sesion') || getItemValue(item, 'fecha') || getItemValue(item, 'Fecha_Recibido') || '');
-                return itemYear.includes(y);
+                const raw = String(
+                    getItemValue(item, yearField) ||
+                    getItemValue(item, 'ano') ||
+                    ''
+                );
+                if (!raw) return false;
+                // For 4-digit year fields, match directly
+                if (/^\d{4}$/.test(raw)) return raw === y;
+                // For date strings, extract the year
+                const dt = parseDate(raw);
+                return dt && !isNaN(dt) && String(dt.getFullYear()) === y;
             });
         }
 
@@ -1955,10 +1998,11 @@ function checkSession() {
 
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.onclick = (e) => {
+                const targetBtn = e.currentTarget || btn;
                 document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
+                targetBtn.classList.add('active');
 
-                const text = e.target.innerText.toLowerCase();
+                const text = (targetBtn.innerText || targetBtn.textContent || '').trim().toLowerCase();
                 if (text.includes('todos')) currentFilter = 'todos';
                 else if (text.includes('recientes')) currentFilter = 'recientes';
                 else if (text.includes('archivados')) currentFilter = 'archivados';
