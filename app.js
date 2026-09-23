@@ -76,7 +76,7 @@
             { id: 'dependencia', name: 'DEPENDENCIA / ORGANISMO', type: 'text', full: true, required: true },
             { id: 'observaciones', name: 'OBSERVACIONES', type: 'textarea', full: true },
             { id: 'dictamen', name: 'DICTAMEN', type: 'textarea', full: true },
-            { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA', 'NO VOTO'] },
+            { id: 'voto_diputada', name: 'VOTO DIPUTADA', type: 'select', options: ['A FAVOR', 'EN CONTRA', 'NO VOTO', 'ABSTENCIÓN'] },
             { id: 'voto_final', name: 'VOTO FINAL', type: 'text' },
             { id: 'fallo', name: 'FALLO', type: 'text' }
         ]
