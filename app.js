@@ -515,9 +515,10 @@
             return;
         }
 
-        await fetchCatalogs();
+        // Verificar sesión de inmediato para no dejar la pantalla en espera
         if (checkSession()) {
-            await loadData();
+            loadData();
+            fetchCatalogs(); // Carga catálogos en segundo plano sin congelar la app
         }
     }
 
@@ -1932,8 +1933,8 @@ function checkSession() {
                         document.querySelector('.user-name').innerText = loggedUser;
                         document.querySelector('.user-role').innerText = (role === 'admin' || role === '1') ? 'Administrador' : 'Usuario';
                         showToast(`¡Bienvenido, ${loggedUser}!`, 'success');
-                        await fetchCatalogs();
                         loadData();
+                        fetchCatalogs();
                     }
                 } catch (err) {
                     if (errorMsg) {
