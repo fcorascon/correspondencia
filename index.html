@@ -124,21 +124,21 @@
                 </div>
             </div>
 
-            <div class="stats-container">
+            <div class="stats-container" id="statsContainer">
                 <div class="stat-card">
-                    <span class="stat-count">2,420</span>
+                    <span class="stat-count">...</span>
                     <span class="stat-label">Total Registros</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-count">128</span>
+                    <span class="stat-count">...</span>
                     <span class="stat-label">Este Mes</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-count">42</span>
+                    <span class="stat-count">...</span>
                     <span class="stat-label">Pendientes</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-count">12</span>
+                    <span class="stat-count">...</span>
                     <span class="stat-label">Urgentes</span>
                 </div>
             </div>
@@ -167,7 +167,16 @@
                         <input type="text" id="tableSearchInput" placeholder="Buscar registros...">
                     </div>
                 </div>
-                <div class="table-header-spacer"></div>
+                <div class="table-view-switcher">
+                    <button type="button" class="view-btn active" id="btnViewTable" title="Vista Lista / Tabla" onclick="setViewMode('table')">
+                        <i class="bi bi-table"></i>
+                        <span>Tabla</span>
+                    </button>
+                    <button type="button" class="view-btn" id="btnViewKanban" title="Vista Tablero Kanban" onclick="setViewMode('kanban')">
+                        <i class="bi bi-kanban"></i>
+                        <span>Kanban</span>
+                    </button>
+                </div>
             </div>
 
             <div id="dataGrid">

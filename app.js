@@ -14,6 +14,7 @@
     let currentFilter = 'todos';
     let sortField = null;
     let sortDir = 'asc';
+    let currentView = localStorage.getItem('correspondencia_view') || 'table';
     const schemas = {
         recibida: [
             { id: 'Fecha_Recibido', name: 'FECHA RECIBIDO', type: 'date', required: true },
@@ -515,6 +516,12 @@
             return;
         }
 
+        // Renderizar inmediatamente la cabecera de tarjetas e inicializar vista
+        renderStatsLoading(currentSection);
+        if (typeof window.setViewMode === 'function') {
+            window.setViewMode(currentView);
+        }
+
         // Verificar sesión de inmediato para no dejar la pantalla en espera
         if (checkSession()) {
             loadData();
@@ -597,60 +604,523 @@
         }
     }
 
-    function updateStats(data) {
-        const stats = document.querySelectorAll('.stat-count');
-        if (!stats.length) return;
+    const sectionStatsConfig = {
+        recibida: [
+            { id: 'total', label: 'Total Recibida', icon: 'bi-envelope-check', iconClass: 'stat-icon-blue' },
+            { id: 'mes', label: 'Este Mes', icon: 'bi-calendar-check', iconClass: 'stat-icon-green' },
+            { id: 'eventos', label: 'Con Evento / Agenda', icon: 'bi-calendar-event', iconClass: 'stat-icon-purple' },
+            { id: 'archivos', label: 'Con PDF Adjunto', icon: 'bi-file-earmark-pdf', iconClass: 'stat-icon-amber' }
+        ],
+        despachada: [
+            { id: 'total', label: 'Total Despachada', icon: 'bi-send', iconClass: 'stat-icon-blue' },
+            { id: 'mes', label: 'Este Mes', icon: 'bi-calendar-check', iconClass: 'stat-icon-green' },
+            { id: 'pendientes', label: 'Pendientes', icon: 'bi-clock-history', iconClass: 'stat-icon-amber' },
+            { id: 'entregados', label: 'Entregados / Concluidos', icon: 'bi-check2-circle', iconClass: 'stat-icon-green' }
+        ],
+        iniciativas: [
+            { id: 'total', label: 'Total Iniciativas', icon: 'bi-file-earmark-text', iconClass: 'stat-icon-blue' },
+            { id: 'comision', label: 'En Comisión', icon: 'bi-hourglass-split', iconClass: 'stat-icon-purple' },
+            { id: 'dictaminadas', label: 'Dictaminadas / Pleno', icon: 'bi-clipboard2-check', iconClass: 'stat-icon-indigo' },
+            { id: 'decreto', label: 'Con Decreto / Aprobadas', icon: 'bi-award', iconClass: 'stat-icon-green' }
+        ],
+        proposiciones: [
+            { id: 'total', label: 'Total Proposiciones', icon: 'bi-pencil-square', iconClass: 'stat-icon-blue' },
+            { id: 'pleno', label: 'En Pleno / Votadas', icon: 'bi-bank', iconClass: 'stat-icon-indigo' },
+            { id: 'respuesta', label: 'Con Respuesta Autoridad', icon: 'bi-reply-all', iconClass: 'stat-icon-green' },
+            { id: 'turnadas', label: 'Turnadas a Comisión', icon: 'bi-arrow-repeat', iconClass: 'stat-icon-amber' }
+        ],
+        fiscalizacion: [
+            { id: 'total', label: 'Total Dictámenes', icon: 'bi-clipboard2-data', iconClass: 'stat-icon-blue' },
+            { id: 'favor', label: 'A Favor', icon: 'bi-hand-thumbs-up-fill', iconClass: 'stat-icon-green' },
+            { id: 'contra', label: 'En Contra', icon: 'bi-hand-thumbs-down-fill', iconClass: 'stat-icon-red' },
+            { id: 'observaciones', label: 'Con Observaciones', icon: 'bi-exclamation-triangle-fill', iconClass: 'stat-icon-amber' }
+        ]
+    };
 
+    function renderStatsLoading(section) {
+        const container = document.getElementById('statsContainer');
+        if (!container) return;
+        const config = sectionStatsConfig[section] || sectionStatsConfig.recibida;
+        let html = '';
+        config.forEach(c => {
+            html += `
+                <div class="stat-card" data-stat-id="${c.id}">
+                    <div class="stat-icon-wrap ${c.iconClass}">
+                        <i class="bi ${c.icon}"></i>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-count">...</span>
+                        <span class="stat-label" title="${escapeHTML(c.label)}">${escapeHTML(c.label)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    function updateStats(data) {
+        const container = document.getElementById('statsContainer');
+        if (!container) return;
+
+        const config = sectionStatsConfig[currentSection] || sectionStatsConfig.recibida;
         const now = new Date();
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
 
-        let thisMonthCount = 0;
-        let pendientesCount = 0;
-        let urgentesCount = 0;
+        let counts = {
+            card0: data.length,
+            card1: 0,
+            card2: 0,
+            card3: 0
+        };
 
-        let dateField = '';
-        if (currentSection === 'recibida') dateField = 'Fecha_Recibido';
-        else if (currentSection === 'despachada') dateField = 'Fecha';
-        else if (currentSection === 'iniciativas') dateField = 'fecha_oficio';
-        else if (currentSection === 'proposiciones') dateField = 'fecha_ingreso_procepar';
-        else if (currentSection === 'fiscalizacion') dateField = 'fecha_sesion';
+        if (currentSection === 'recibida') {
+            data.forEach(item => {
+                // Mes
+                const dt = parseDate(getItemValue(item, 'Fecha_Recibido'));
+                if (dt && dt.getMonth() === currentMonth && dt.getFullYear() === currentYear) counts.card1++;
+                // Evento
+                const ev = getItemValue(item, 'fecha_evento');
+                if (ev && String(ev).trim() && String(ev).trim() !== '-') counts.card2++;
+                // PDF
+                const pdf = getItemValue(item, 'PDF-Imagen');
+                if (pdf && String(pdf).trim() && String(pdf).trim() !== '-') counts.card3++;
+            });
+        } else if (currentSection === 'despachada') {
+            data.forEach(item => {
+                // Mes
+                const dt = parseDate(getItemValue(item, 'Fecha'));
+                if (dt && dt.getMonth() === currentMonth && dt.getFullYear() === currentYear) counts.card1++;
+                // Pendientes
+                const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                if (!st || st.includes('pendiente') || st.includes('proceso') || st.includes('tramite') || st.includes('trámite')) {
+                    counts.card2++;
+                }
+                // Entregados / Concluidos
+                if (st.includes('entregad') || st.includes('concluid') || st.includes('atendid') || st.includes('notificad') || st.includes('recibid')) {
+                    counts.card3++;
+                }
+            });
+        } else if (currentSection === 'iniciativas') {
+            data.forEach(item => {
+                // En Comision
+                const com = getItemValue(item, 'comision');
+                const dict = getItemValue(item, 'dictaminada_favor_contra');
+                if (com && com !== 'SIN COMISIÓN' && !dict) counts.card1++;
+                // Dictaminadas / Pleno
+                const pleno = getItemValue(item, 'fecha_pleno');
+                if (dict || pleno) counts.card2++;
+                // Con Decreto
+                const dec = getItemValue(item, 'decreto');
+                const pDec = getItemValue(item, 'proyecto_decreto');
+                if ((dec && String(dec).trim()) || (pDec && String(pDec).trim() && String(pDec).trim() !== '-')) counts.card3++;
+            });
+        } else if (currentSection === 'proposiciones') {
+            data.forEach(item => {
+                // En Pleno / Votadas
+                const pleno = getItemValue(item, 'fecha_pleno');
+                const vot = getItemValue(item, 'resultado_votacion');
+                if (pleno || vot) counts.card1++;
+                // Con Respuesta Autoridad
+                const resp = getItemValue(item, 'fecha_respuesta_autoridad') || getItemValue(item, 'respuesta_acuerdo');
+                if (resp && String(resp).trim() && String(resp).trim() !== '-') counts.card2++;
+                // Turnadas
+                const turn = getItemValue(item, 'turnado_comision');
+                if (turn && String(turn).trim()) counts.card3++;
+            });
+        } else if (currentSection === 'fiscalizacion') {
+            data.forEach(item => {
+                const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || getItemValue(item, 'dictamen') || '').toUpperCase();
+                if (voto.includes('A FAVOR') || voto.includes('FAVOR')) counts.card1++;
+                if (voto.includes('EN CONTRA') || voto.includes('CONTRA')) counts.card2++;
 
-        data.forEach(item => {
-            // Este Mes logic
-            const dateStr = getItemValue(item, dateField);
-            if (dateStr) {
-                const dt = parseDate(dateStr);
-                if (dt && dt.getMonth() === currentMonth && dt.getFullYear() === currentYear) {
-                    thisMonthCount++;
+                const obs = String(getItemValue(item, 'observaciones') || '').toUpperCase();
+                const hasObs = obs && !obs.includes('NO SE GENERARON') && !obs.includes('NO SE PRESENTARON') && (obs.includes('OBSERVACI') || obs.includes('RECOMENDACI') || obs.includes('PRAS') || obs.includes('PEFCF'));
+                if (hasObs) counts.card3++;
+            });
+        }
+
+        let html = '';
+        const values = [counts.card0, counts.card1, counts.card2, counts.card3];
+        config.forEach((c, idx) => {
+            html += `
+                <div class="stat-card" data-stat-id="${c.id}">
+                    <div class="stat-icon-wrap ${c.iconClass}">
+                        <i class="bi ${c.icon}"></i>
+                    </div>
+                    <div class="stat-content">
+                        <span class="stat-count">${values[idx].toLocaleString()}</span>
+                        <span class="stat-label" title="${escapeHTML(c.label)}">${escapeHTML(c.label)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    const kanbanConfig = {
+        recibida: [
+            {
+                id: 'por_atender',
+                title: 'Por Atender',
+                icon: 'bi-inbox',
+                filter: (item) => {
+                    const evento = getItemValue(item, 'fecha_evento');
+                    const allText = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
+                    const isDone = allText.includes('concluid') || allText.includes('atendid') || allText.includes('archiv');
+                    return !isDone && !evento;
+                }
+            },
+            {
+                id: 'agenda',
+                title: 'Con Evento / Agenda',
+                icon: 'bi-calendar-event',
+                filter: (item) => {
+                    const evento = getItemValue(item, 'fecha_evento');
+                    const allText = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
+                    const isDone = allText.includes('concluid') || allText.includes('atendid') || allText.includes('archiv');
+                    return !isDone && !!evento;
+                }
+            },
+            {
+                id: 'concluidos',
+                title: 'Atendidos / Concluidos',
+                icon: 'bi-check-circle',
+                filter: (item) => {
+                    const allText = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
+                    return allText.includes('concluid') || allText.includes('atendid') || allText.includes('archiv');
                 }
             }
+        ],
+        despachada: [
+            {
+                id: 'pendientes',
+                title: 'Pendientes',
+                icon: 'bi-clock-history',
+                filter: (item) => {
+                    const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                    return !st || st.includes('pendiente');
+                }
+            },
+            {
+                id: 'enviados',
+                title: 'En Trámite / Enviados',
+                icon: 'bi-send',
+                filter: (item) => {
+                    const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                    return st.includes('tramite') || st.includes('trámite') || st.includes('enviado') || st.includes('proceso');
+                }
+            },
+            {
+                id: 'entregados',
+                title: 'Entregados / Concluidos',
+                icon: 'bi-check-circle',
+                filter: (item) => {
+                    const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                    return st.includes('entregad') || st.includes('concluid') || st.includes('atendid') || st.includes('recibid') || st.includes('notificad');
+                }
+            }
+        ],
+        iniciativas: [
+            {
+                id: 'oficialia',
+                title: 'Presentadas / Oficialía',
+                icon: 'bi-file-earmark-plus',
+                filter: (item) => {
+                    const com = getItemValue(item, 'comision');
+                    const dict = getItemValue(item, 'dictaminada_favor_contra');
+                    const pleno = getItemValue(item, 'fecha_pleno');
+                    return !dict && !pleno && (!com || com === 'SIN COMISIÓN');
+                }
+            },
+            {
+                id: 'comision',
+                title: 'En Comisión / Turno Legis',
+                icon: 'bi-hourglass-split',
+                filter: (item) => {
+                    const com = getItemValue(item, 'comision');
+                    const dict = getItemValue(item, 'dictaminada_favor_contra');
+                    const pleno = getItemValue(item, 'fecha_pleno');
+                    return !dict && !pleno && com && com !== 'SIN COMISIÓN';
+                }
+            },
+            {
+                id: 'dictamen',
+                title: 'Dictaminadas / Pleno',
+                icon: 'bi-clipboard2-check',
+                filter: (item) => {
+                    const dict = getItemValue(item, 'dictaminada_favor_contra');
+                    const pleno = getItemValue(item, 'fecha_pleno');
+                    const dec = getItemValue(item, 'decreto');
+                    return !!(dict || pleno || dec);
+                }
+            }
+        ],
+        proposiciones: [
+            {
+                id: 'ingreso',
+                title: 'Ingreso Procepar',
+                icon: 'bi-inbox-fill',
+                filter: (item) => {
+                    const pleno = getItemValue(item, 'fecha_pleno');
+                    const resp = getItemValue(item, 'fecha_respuesta_autoridad');
+                    return !pleno && !resp;
+                }
+            },
+            {
+                id: 'pleno',
+                title: 'En Pleno / Turnadas',
+                icon: 'bi-bank',
+                filter: (item) => {
+                    const pleno = getItemValue(item, 'fecha_pleno');
+                    const resp = getItemValue(item, 'fecha_respuesta_autoridad');
+                    return !!pleno && !resp;
+                }
+            },
+            {
+                id: 'respuesta',
+                title: 'Con Respuesta / Concluidas',
+                icon: 'bi-check-all',
+                filter: (item) => {
+                    const resp = getItemValue(item, 'fecha_respuesta_autoridad') || getItemValue(item, 'respuesta_acuerdo');
+                    return !!resp;
+                }
+            }
+        ],
+        fiscalizacion: [
+            {
+                id: 'revision',
+                title: 'En Revisión / Pendientes',
+                icon: 'bi-hourglass-split',
+                filter: (item) => {
+                    const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || '').toUpperCase();
+                    return !voto || voto === '—' || voto === 'PENDIENTE';
+                }
+            },
+            {
+                id: 'observaciones',
+                title: 'Con Observaciones',
+                icon: 'bi-exclamation-triangle',
+                filter: (item) => {
+                    const obs = String(getItemValue(item, 'observaciones') || '').toUpperCase();
+                    const hasObs = obs && !obs.includes('NO SE GENERARON') && !obs.includes('NO SE PRESENTARON') && (obs.includes('OBSERVACI') || obs.includes('RECOMENDACI') || obs.includes('PRAS') || obs.includes('PEFCF'));
+                    const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || '').toUpperCase();
+                    return hasObs && !voto.includes('A FAVOR') && !voto.includes('EN CONTRA');
+                }
+            },
+            {
+                id: 'favor',
+                title: 'Aprobados (A Favor)',
+                icon: 'bi-check-circle-fill',
+                filter: (item) => {
+                    const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || getItemValue(item, 'dictamen') || '').toUpperCase();
+                    return voto.includes('A FAVOR') || voto.includes('FAVOR');
+                }
+            },
+            {
+                id: 'contra',
+                title: 'En Contra / Rechazados',
+                icon: 'bi-x-circle-fill',
+                filter: (item) => {
+                    const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || getItemValue(item, 'dictamen') || '').toUpperCase();
+                    return voto.includes('EN CONTRA') || voto.includes('CONTRA') || voto.includes('ABSTENC');
+                }
+            }
+        ]
+    };
 
-            // Pendientes / Urgentes logic (búsqueda genérica)
-            let isPendiente = false;
-            let isUrgente = false;
+    function createKanbanCard(item, activeSearchTerm) {
+        const card = document.createElement('div');
+        card.className = 'kanban-card';
+        card.onclick = () => window.viewEntry(item.id);
 
-            const estatusVal = getItemValue(item, 'Estatus') || getItemValue(item, 'fallo') || '';
-            if (estatusVal) {
-                const estatus = String(estatusVal).toLowerCase();
-                if (estatus.includes('pendiente') || estatus.includes('en contra') || estatus.includes('observaciones')) isPendiente = true;
-                if (estatus.includes('urgente')) isUrgente = true;
+        let titleVal = '';
+        let subtitleVal = '';
+        let metaBadges = [];
+        let fileLinks = '';
+
+        if (currentSection === 'fiscalizacion') {
+            const ano = getItemValue(item, 'ano') || '2024';
+            const dictamenNo = getItemValue(item, 'dictamen_no') || '—';
+            const fechaSesion = formatDateDMY(getItemValue(item, 'fecha_sesion'));
+            const dependencia = getItemValue(item, 'dependencia') || 'Sin Dependencia';
+            const fallo = getItemValue(item, 'fallo') || '—';
+            let votoDiputada = getItemValue(item, 'voto_diputada');
+            if (!votoDiputada && fallo) {
+                if (fallo.toUpperCase().includes('A FAVOR')) votoDiputada = 'A FAVOR';
+                else if (fallo.toUpperCase().includes('EN CONTRA')) votoDiputada = 'EN CONTRA';
             }
 
-            if (!isPendiente && !isUrgente) {
-                const allValues = Object.values(item).map(v => String(v).toLowerCase()).join(' ');
-                if (!isPendiente && (allValues.includes('pendiente') || allValues.includes('en contra'))) isPendiente = true;
-                if (!isUrgente && allValues.includes('urgente')) isUrgente = true;
-            }
+            titleVal = dependencia;
+            subtitleVal = `Dictamen No. ${dictamenNo}`;
 
-            if (isPendiente) pendientesCount++;
-            if (isUrgente) urgentesCount++;
+            metaBadges.push(`<span class="badge badge-info">${escapeHTML(ano)}</span>`);
+            if (fechaSesion && fechaSesion !== '—') {
+                metaBadges.push(`<span style="color:var(--text-muted);"><i class="bi bi-calendar3"></i> ${escapeHTML(fechaSesion)}</span>`);
+            }
+            if (votoDiputada) {
+                const vu = votoDiputada.toUpperCase();
+                if (vu.includes('FAVOR')) metaBadges.push(`<span class="badge badge-success">${escapeHTML(votoDiputada)}</span>`);
+                else if (vu.includes('CONTRA')) metaBadges.push(`<span class="badge" style="background:#FEF3F2; color:#B42318;">${escapeHTML(votoDiputada)}</span>`);
+                else metaBadges.push(`<span class="badge badge-warning">${escapeHTML(votoDiputada)}</span>`);
+            }
+            if (fallo && fallo !== '—') {
+                subtitleVal += ` · ${fallo}`;
+            }
+        } else if (currentSection === 'recibida') {
+            titleVal = getItemValue(item, 'Remite') || 'Sin Remitente';
+            subtitleVal = getItemValue(item, 'Asunto') || '';
+            const fechaRec = formatDateDMY(getItemValue(item, 'Fecha_Recibido'));
+            if (fechaRec && fechaRec !== '—') {
+                metaBadges.push(`<span class="badge badge-success"><i class="bi bi-calendar-check"></i> ${escapeHTML(fechaRec)}</span>`);
+            }
+            const recip = getItemValue(item, 'Recibio');
+            if (recip) metaBadges.push(`<span style="color:var(--text-muted);"><i class="bi bi-person"></i> ${escapeHTML(recip)}</span>`);
+            const fechaEv = formatDateDMY(getItemValue(item, 'fecha_evento'));
+            if (fechaEv && fechaEv !== '—') {
+                metaBadges.push(`<span class="badge badge-warning"><i class="bi bi-calendar-event"></i> Evento: ${escapeHTML(fechaEv)}</span>`);
+            }
+            fileLinks = renderFileLinks(getItemValue(item, 'PDF-Imagen'));
+        } else if (currentSection === 'despachada') {
+            titleVal = getItemValue(item, 'Dirigido') || 'Sin Destinatario';
+            subtitleVal = getItemValue(item, 'Asunto') || '';
+            const fecha = formatDateDMY(getItemValue(item, 'Fecha'));
+            if (fecha && fecha !== '—') {
+                metaBadges.push(`<span class="badge badge-info"><i class="bi bi-calendar3"></i> ${escapeHTML(fecha)}</span>`);
+            }
+            const st = getItemValue(item, 'Estatus') || 'Pendiente';
+            const stu = st.toUpperCase();
+            if (stu.includes('ENTREG') || stu.includes('CONCLU')) {
+                metaBadges.push(`<span class="badge badge-success">${escapeHTML(st)}</span>`);
+            } else if (stu.includes('PEND')) {
+                metaBadges.push(`<span class="badge badge-warning">${escapeHTML(st)}</span>`);
+            } else {
+                metaBadges.push(`<span class="badge badge-info">${escapeHTML(st)}</span>`);
+            }
+            const elab = getItemValue(item, 'Elaboro');
+            if (elab) metaBadges.push(`<span style="color:var(--text-muted);"><i class="bi bi-pen"></i> ${escapeHTML(elab)}</span>`);
+            fileLinks = renderFileLinks(getItemValue(item, 'Archivos y multimedia'));
+        } else if (currentSection === 'iniciativas') {
+            titleVal = `Iniciativa #${item.id || ''}`;
+            subtitleVal = getItemValue(item, 'texto') || getItemValue(item, 'INICIATIVA') || '';
+            const fOficio = formatDateDMY(getItemValue(item, 'fecha_oficio'));
+            if (fOficio && fOficio !== '—') {
+                metaBadges.push(`<span class="badge badge-warning"><i class="bi bi-calendar3"></i> ${escapeHTML(fOficio)}</span>`);
+            }
+            const com = getItemValue(item, 'comision');
+            if (com) metaBadges.push(`<span class="badge badge-info">${escapeHTML(com)}</span>`);
+            const dict = getItemValue(item, 'dictaminada_favor_contra');
+            if (dict) metaBadges.push(`<span class="badge badge-success">${escapeHTML(dict)}</span>`);
+            fileLinks = renderFileLinks(getItemValue(item, 'pdf'));
+        } else if (currentSection === 'proposiciones') {
+            titleVal = `Proposición #${item.id || ''}`;
+            subtitleVal = getItemValue(item, 'objetivo') || getItemValue(item, 'proposicion') || '';
+            const fPleno = formatDateDMY(getItemValue(item, 'fecha_pleno'));
+            if (fPleno && fPleno !== '—') {
+                metaBadges.push(`<span class="badge badge-info"><i class="bi bi-calendar3"></i> ${escapeHTML(fPleno)}</span>`);
+            }
+            const tipo = getItemValue(item, 'tipo');
+            if (tipo) metaBadges.push(`<span class="badge badge-success">${escapeHTML(tipo)}</span>`);
+            const turn = getItemValue(item, 'turnado_comision');
+            if (turn) metaBadges.push(`<span style="color:var(--text-muted);"><i class="bi bi-briefcase"></i> ${escapeHTML(turn)}</span>`);
+            fileLinks = renderFileLinks(getItemValue(item, 'pdf_foto'));
+        }
+
+        const filesBadge = (fileLinks && fileLinks !== '-')
+            ? `<div style="font-size:0.75rem; margin-top:0.25rem;">${fileLinks}</div>`
+            : '';
+
+        const isFisca = currentSection === 'fiscalizacion';
+
+        card.innerHTML = `
+            <div class="kanban-card-header">
+                <div class="kanban-card-title">${highlightText(titleVal, activeSearchTerm)}</div>
+            </div>
+            ${subtitleVal ? `<div class="kanban-card-desc">${highlightText(subtitleVal, activeSearchTerm)}</div>` : ''}
+            <div class="kanban-card-meta">
+                ${metaBadges.join('')}
+            </div>
+            ${filesBadge}
+            <div class="kanban-card-footer" onclick="event.stopPropagation()">
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">#${item.id || ''}</span>
+                <div class="kanban-card-actions">
+                    <i class="bi bi-eye action-icon" onclick="viewEntry(${item.id})" title="Ver detalles"></i>
+                    <i class="bi bi-pencil action-icon" onclick="editEntry(${item.id})" title="Editar"></i>
+                    <i class="bi bi-trash action-icon action-icon-danger" style="color: #D92D20;" onclick="deleteEntry(${item.id})" title="Eliminar"></i>
+                    ${isFisca ? `<i class="bi bi-file-pdf action-icon-pdf" onclick="viewPDF(${item.id})" title="Ficha PDF"></i>` : ''}
+                </div>
+            </div>
+        `;
+
+        return card;
+    }
+
+    function renderKanbanBoard(data, activeSearchTerm) {
+        const grid = document.getElementById('dataGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        const colsConfig = kanbanConfig[currentSection] || [];
+        if (!colsConfig.length) {
+            grid.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">No hay configuración Kanban para esta sección.</div>';
+            return;
+        }
+
+        const board = document.createElement('div');
+        board.className = 'kanban-board';
+
+        // Clasificar items por columna
+        const colItemsMap = {};
+        colsConfig.forEach(col => { colItemsMap[col.id] = []; });
+
+        data.forEach(item => {
+            let matched = false;
+            for (let col of colsConfig) {
+                if (col.filter(item)) {
+                    colItemsMap[col.id].push(item);
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched && colsConfig.length > 0) {
+                colItemsMap[colsConfig[0].id].push(item);
+            }
         });
 
-        if (stats.length >= 1) stats[0].innerText = data.length.toLocaleString();
-        if (stats.length >= 2) stats[1].innerText = thisMonthCount.toLocaleString();
-        if (stats.length >= 3) stats[2].innerText = pendientesCount.toLocaleString();
-        if (stats.length >= 4) stats[3].innerText = urgentesCount.toLocaleString();
+        // Renderizar cada columna
+        colsConfig.forEach(col => {
+            const items = colItemsMap[col.id] || [];
+            const colElem = document.createElement('div');
+            colElem.className = 'kanban-column';
+
+            const colHeader = document.createElement('div');
+            colHeader.className = 'kanban-col-header';
+            colHeader.innerHTML = `
+                <div class="kanban-col-title">
+                    <i class="bi ${col.icon}"></i>
+                    <span>${escapeHTML(col.title)}</span>
+                </div>
+                <span class="kanban-col-count">${items.length}</span>
+            `;
+            colElem.appendChild(colHeader);
+
+            const cardsWrap = document.createElement('div');
+            cardsWrap.className = 'kanban-cards-wrap';
+
+            if (items.length === 0) {
+                cardsWrap.innerHTML = '<div class="kanban-empty">Sin registros en esta columna</div>';
+            } else {
+                items.forEach(item => {
+                    const card = createKanbanCard(item, activeSearchTerm);
+                    cardsWrap.appendChild(card);
+                });
+            }
+
+            colElem.appendChild(cardsWrap);
+            board.appendChild(colElem);
+        });
+
+        grid.appendChild(board);
     }
 
     function formatDriveUrl(url) {
@@ -741,11 +1211,33 @@
         const totalItems = sortedData.length;
         const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
+        const paginationWrap = document.querySelector('.page-size-wrap');
+        const pageControls = document.querySelector('.page-controls');
+        const pageInfo = document.getElementById('pageInfo');
+
+        if (currentView === 'kanban') {
+            if (paginationWrap) paginationWrap.style.display = 'none';
+            if (pageControls) pageControls.style.display = 'none';
+            if (pageInfo) {
+                pageInfo.innerText = totalItems > 0 
+                    ? `Mostrando ${totalItems} registros en el tablero Kanban` 
+                    : '0 registros en el tablero Kanban';
+            }
+            if (totalItems === 0) {
+                grid.innerHTML = '<div style="text-align: center; padding: 4rem; color: var(--text-muted);"><i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>No se encontraron registros.</div>';
+                return;
+            }
+            renderKanbanBoard(sortedData, activeSearchTerm);
+            return;
+        } else {
+            if (paginationWrap) paginationWrap.style.display = 'flex';
+            if (pageControls) pageControls.style.display = 'flex';
+        }
+
         if (currentPage > totalPages) currentPage = totalPages;
         if (currentPage < 1) currentPage = 1;
 
         // Actualizar controles de paginación
-        const pageInfo = document.getElementById('pageInfo');
         if (pageInfo) {
             pageInfo.innerText = totalItems > 0 
                 ? `Página ${currentPage} de ${totalPages} (${totalItems} registros)` 
@@ -1114,8 +1606,23 @@
             btnFichaPDF.style.display = section === 'fiscalizacion' ? 'inline-flex' : 'none';
         }
 
+        renderStatsLoading(section);
         loadData();
     }
+
+    window.setViewMode = function (mode) {
+        currentView = mode;
+        localStorage.setItem('correspondencia_view', mode);
+
+        const btnTable = document.getElementById('btnViewTable');
+        const btnKanban = document.getElementById('btnViewKanban');
+        if (btnTable && btnKanban) {
+            btnTable.classList.toggle('active', mode === 'table');
+            btnKanban.classList.toggle('active', mode === 'kanban');
+        }
+
+        renderGrid();
+    };
 
     window.viewEntry = function (id) {
         const item = allData.find(d => d.id === id);
