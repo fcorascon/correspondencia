@@ -330,11 +330,14 @@
             else if (currentSection === 'iniciativas') field = 'texto';
             else if (currentSection === 'proposiciones') field = 'proposicion';
         }
+        const isDateField = String(field).toLowerCase().includes('fecha') || String(field).toLowerCase().includes('date');
         return [...data].sort((a, b) => {
             let vA = String(getItemValue(a, field) || '');
             let vB = String(getItemValue(b, field) || '');
-            const dA = parseDate(vA), dB = parseDate(vB);
-            if (dA && dB && !isNaN(dA) && !isNaN(dB)) return sortDir === 'asc' ? dA - dB : dB - dA;
+            if (isDateField) {
+                const dA = parseDate(vA), dB = parseDate(vB);
+                if (dA && dB && !isNaN(dA) && !isNaN(dB)) return sortDir === 'asc' ? dA - dB : dB - dA;
+            }
             const cmp = vA.localeCompare(vB, 'es', { numeric: true, sensitivity: 'base' });
             return sortDir === 'asc' ? cmp : -cmp;
         });
@@ -1558,7 +1561,19 @@
 
         if (term) {
             filtered = filtered.filter(item => {
-                return Object.values(item).some(val => String(val).toLowerCase().includes(term));
+                const values = Object.values(item).map(val => String(val).toLowerCase());
+                // Incluir fechas formateadas para permitir búsqueda directa por DD-MM-YYYY o DD/MM/YYYY
+                for (let k in item) {
+                    if (k.toLowerCase().includes('fecha')) {
+                        const dmy = formatDateDMY(item[k]);
+                        if (dmy && dmy !== '—') {
+                            values.push(dmy.toLowerCase());
+                            values.push(dmy.replace(/-/g, '/').toLowerCase());
+                        }
+                    }
+                }
+                const termAlt = term.includes('/') ? term.replace(/\//g, '-') : (term.includes('-') ? term.replace(/-/g, '/') : '');
+                return values.some(val => val.includes(term) || (termAlt && val.includes(termAlt)));
             });
         }
 
@@ -1846,11 +1861,7 @@
                 `;
 
                 if (!field.options && sourceData.length === 0) {
-                    let fetchMethod = fetchAutorizados;
-                    if (field.source === 'status') fetchMethod = fetchStatuses;
-                    else if (field.source === 'tipo') fetchMethod = fetchTipos;
-
-                    fetchMethod().then(() => {
+                    fetchCatalogs().then(() => {
                         let currentData = autorizadosData;
                         if (field.source === 'status') currentData = statusesData;
                         else if (field.source === 'tipo') currentData = tiposData;
@@ -1862,7 +1873,7 @@
                                     currentData.map(opt => `<option value="${escapeHTML(opt)}" ${valTarget === opt ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('');
                             }
                         }
-                    });
+                    }).catch(err => console.warn('Error al refrescar catálogos para select:', err));
                 }
             } else if (field.type === 'textarea') {
                 div.innerHTML = `
@@ -2348,7 +2359,7 @@
         }
     };
 
-function checkSession() {
+    function checkSession() {
         const loggedUser = localStorage.getItem('loggedUser');
         const loggedUserRole = localStorage.getItem('loggedUserRole') || 'usuario';
         if (loggedUser) {
@@ -2588,7 +2599,8 @@ function checkSession() {
                 if (existingErr) existingErr.remove();
 
                 const isText = (target.tagName === 'INPUT' && (!target.type || target.type === 'text')) || target.tagName === 'TEXTAREA';
-                if (isText) {
+                const isEmail = target.type === 'email' || target.name?.toLowerCase().includes('correo');
+                if (isText && !isEmail) {
                     const start = target.selectionStart;
                     const end = target.selectionEnd;
                     target.value = target.value.toUpperCase();
