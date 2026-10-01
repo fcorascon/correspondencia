@@ -103,7 +103,7 @@
 
         const aliases = {
             'ano': ['ano', 'AÑO', 'año', 'ejercicio', 'ANIO'],
-            'fecha_sesion': ['fecha_sesion', 'FECHA_SESION', 'fecha', 'FECHA'],
+            'fecha_sesion': ['fecha_sesion', 'FECHA_SESION', 'FECHA SESION', 'FECHA SESIÓN', 'fecha', 'FECHA'],
             'dictamen_no': ['dictamen_no', 'DICTAMEN_NO', 'no_dictamen', 'NO_DICTAMEN', 'num_dictamen', 'numero_dictamen', 'num_dict'],
             'dependencia': ['dependencia', 'DEPENDENCIA', 'organismo', 'ORGANISMO', 'ente', 'ENTE'],
             'observaciones': ['observaciones', 'OBSERVACIONES', 'recomendaciones', 'RECOMENDACIONES'],
@@ -111,7 +111,18 @@
             'voto_diputada': ['voto_diputada', 'VOTO-DIPUTADA', 'voto-diputada', 'VOTO_DIPUTADA', 'voto', 'VOTO'],
             'voto_final': ['voto_final', 'VOTO_FINAL', 'VOTO-FINAL', 'voto-final', 'sentido_final'],
             'fallo': ['fallo', 'FALLO', 'resultado', 'RESULTADO'],
-            'pdf': ['pdf', 'PDF', 'archivo', 'ARCHIVO', 'archivos', 'ARCHIVOS', 'PDF-Imagen']
+            'pdf': ['pdf', 'PDF', 'archivo', 'ARCHIVO', 'archivos', 'ARCHIVOS', 'PDF-Imagen'],
+            'Fecha_Recibido': ['Fecha_Recibido', 'FECHA_RECIBIDO', 'FECHA RECIBIDO', 'Fecha Recibido', 'fecha_recibido', 'FECHA', 'fecha'],
+            'Fecha': ['Fecha', 'FECHA', 'fecha', 'Fecha_Recibido', 'FECHA RECIBIDO'],
+            'fecha_evento': ['fecha_evento', 'FECHA_EVENTO', 'FECHA EVENTO', 'Fecha Evento'],
+            'Fecha_recepcion': ['Fecha_recepcion', 'FECHA_RECEPCION', 'FECHA RECEPCIÓN', 'FECHA RECEPCION', 'Fecha Recepción'],
+            'fecha_oficio': ['fecha_oficio', 'FECHA_OFICIO', 'FECHA OFICIO', 'Fecha Oficio', 'fecha'],
+            'fecha_presentacion_oficialia': ['fecha_presentacion_oficialia', 'FECHA_PRESENTACION_OFICIALIA', 'OFICIALIA', 'OFICIALÍA', 'FECHA OFICIALÍA'],
+            'fecha_turno_legis': ['fecha_turno_legis', 'FECHA_TURNO_LEGIS', 'TURNO LEGIS', 'TURNO_LEGIS'],
+            'fecha_pleno': ['fecha_pleno', 'FECHA_PLENO', 'FECHA PLENO', 'PLENO'],
+            'fecha_ingreso_procepar': ['fecha_ingreso_procepar', 'FECHA_INGRESO_PROCEPAR', 'INGRESO PROCEPAR', 'INGRESO_PROCEPAR'],
+            'fecha_acuse_recibido_autoridad': ['fecha_acuse_recibido_autoridad', 'FECHA_ACUSE_RECIBIDO_AUTORIDAD', 'ACUSE AUTORIDAD', 'ACUSE_AUTORIDAD'],
+            'fecha_respuesta_autoridad': ['fecha_respuesta_autoridad', 'FECHA_RESPUESTA_AUTORIDAD', 'RESPUESTA AUTORIDAD', 'RESPUESTA_AUTORIDAD']
         };
 
         if (aliases[key]) {
@@ -124,45 +135,81 @@
 
     function parseDate(str) {
         if (!str) return null;
+        if (str instanceof Date) {
+            return isNaN(str.getTime()) ? null : str;
+        }
         str = String(str).trim();
+        if (!str || str === '—' || str === '-') return null;
+
+        // Solo año de 4 dígitos: '2024'
         if (/^\d{4}$/.test(str)) {
-            return new Date(parseInt(str, 10), 0, 1);
+            return new Date(parseInt(str, 10), 0, 1, 12, 0, 0);
         }
-        if (str.includes('/')) {
-            const parts = str.split('/');
+
+        // Extraer la parte de la fecha antes de cualquier hora o 'T'
+        const datePart = str.split('T')[0].split(' ')[0].trim();
+        const hasSlash = datePart.includes('/');
+        const hasDash = datePart.includes('-');
+
+        if (hasSlash || hasDash) {
+            const sep = hasSlash ? '/' : '-';
+            const parts = datePart.split(sep);
             if (parts.length === 3) {
-                const d = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10) - 1;
-                const y = parseInt(parts[2], 10);
-                const dt = new Date(y, m, d);
-                return isNaN(dt.getTime()) ? null : dt;
-            }
-        } else if (str.includes('-')) {
-            const parts = str.split('T')[0].split('-');
-            if (parts.length === 3) {
-                const y = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10) - 1;
-                const d = parseInt(parts[2], 10);
-                const dt = new Date(y, m, d);
-                return isNaN(dt.getTime()) ? null : dt;
+                const p0 = parseInt(parts[0], 10);
+                const p1 = parseInt(parts[1], 10);
+                const p2 = parseInt(parts[2], 10);
+
+                let y, m, d;
+                if (parts[0].length === 4) {
+                    // Formato YYYY-MM-DD o YYYY/MM/DD
+                    y = p0;
+                    m = p1 - 1;
+                    d = p2;
+                } else if (parts[2].length === 4 || parts[2].length === 2) {
+                    // Formato DD-MM-YYYY o DD/MM/YYYY
+                    y = parts[2].length === 4 ? p2 : (p2 < 50 ? 2000 + p2 : 1900 + p2);
+                    if (p0 > 12 && p1 <= 12) {
+                        d = p0;
+                        m = p1 - 1;
+                    } else if (p1 > 12 && p0 <= 12) {
+                        m = p0 - 1;
+                        d = p1;
+                    } else {
+                        // Estándar en español DD/MM/AAAA
+                        d = p0;
+                        m = p1 - 1;
+                    }
+                }
+
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                    // Se usa hora 12:00:00 para blindar ante cambios de horario de verano y desfases de huso horario
+                    const dt = new Date(y, m, d, 12, 0, 0);
+                    return isNaN(dt.getTime()) ? null : dt;
+                }
             }
         }
+
         const dt = new Date(str);
         return isNaN(dt.getTime()) ? null : dt;
     }
 
     function formatDateToYMD(date) {
-        if (!date || isNaN(date.getTime())) return '';
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
+        if (!date) return '';
+        let dt = date;
+        if (!(dt instanceof Date)) {
+            dt = parseDate(date);
+        }
+        if (!dt || isNaN(dt.getTime())) return '';
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const d = String(dt.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
     }
 
     // Formatea cualquier cadena de fecha al formato dd-mm-aaaa para mostrar en pantalla y PDF
     function formatDateDMY(str) {
         if (!str) return '—';
-        const dt = parseDate(String(str).trim());
+        const dt = parseDate(str);
         if (!dt || isNaN(dt.getTime())) return String(str).trim();
         const d = String(dt.getDate()).padStart(2, '0');
         const m = String(dt.getMonth() + 1).padStart(2, '0');
@@ -1713,12 +1760,13 @@
 
             // Para inputs de fecha, normalizar al formato yyyy-MM-dd que requiere <input type="date">
             let dateValue = '';
-            if (field.type === 'date' && rawValue) {
-                const dt = parseDate(String(rawValue).trim());
-                if (dt && !isNaN(dt.getTime())) {
-                    dateValue = formatDateToYMD(dt);
-                } else {
-                    dateValue = rawValue; // dejar como está
+            if (field.type === 'date') {
+                if (rawValue) {
+                    const dt = parseDate(rawValue);
+                    dateValue = dt ? formatDateToYMD(dt) : String(rawValue).trim();
+                } else if (!isEdit && field.required) {
+                    // Si es nuevo registro y el campo de fecha es obligatorio, precargar fecha de hoy
+                    dateValue = formatDateToYMD(new Date());
                 }
             }
 
@@ -2646,6 +2694,13 @@ function checkSession() {
                                 const trimmed = val.trim();
                                 if (fieldDef.type === 'email' || key.toLowerCase().includes('correo')) {
                                     entry[key] = trimmed.toLowerCase();
+                                } else if (fieldDef.type === 'date') {
+                                    if (trimmed) {
+                                        const dt = parseDate(trimmed);
+                                        entry[key] = dt ? formatDateToYMD(dt) : trimmed;
+                                    } else {
+                                        entry[key] = '';
+                                    }
                                 } else {
                                     entry[key] = trimmed.toUpperCase();
                                 }

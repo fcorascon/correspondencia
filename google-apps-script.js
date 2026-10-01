@@ -210,11 +210,16 @@ function handleRead(tableName) {
         headers.forEach((header, colIdx) => {
             let val = row[colIdx];
             if (val instanceof Date) {
-                // Formato YYYY-MM-DD si es fecha
-                const y = val.getFullYear();
-                const m = String(val.getMonth() + 1).padStart(2, '0');
-                const d = String(val.getDate()).padStart(2, '0');
-                val = `${y}-${m}-${d}`;
+                // Formato YYYY-MM-DD usando la zona horaria de la hoja para evitar desfase de días
+                try {
+                    const tz = ss.getSpreadsheetTimeZone() || Session.getScriptTimeZone() || 'GMT';
+                    val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+                } catch (e) {
+                    const y = val.getFullYear();
+                    const m = String(val.getMonth() + 1).padStart(2, '0');
+                    const d = String(val.getDate()).padStart(2, '0');
+                    val = `${y}-${m}-${d}`;
+                }
             } else if (val === null || val === undefined) {
                 val = '';
             }
