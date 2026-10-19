@@ -1,5 +1,11 @@
 (function () {
-    let GOOGLE_SCRIPT_URL = localStorage.getItem('googleScriptUrl') || '';
+    const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxdj2hCcliJt_YplYhOuEcENinLkunUXflVHGsLa14OsILur_4GTteApNnd7HP4O2c1/exec';
+    let storedUrl = localStorage.getItem('googleScriptUrl');
+    if (!storedUrl || !storedUrl.includes('/exec')) {
+        storedUrl = DEFAULT_SCRIPT_URL;
+        try { localStorage.setItem('googleScriptUrl', DEFAULT_SCRIPT_URL); } catch (_) {}
+    }
+    let GOOGLE_SCRIPT_URL = storedUrl;
 
     let currentSection = 'recibida';
     let currentEditId = null;
@@ -398,7 +404,7 @@
     // GOOGLE APPS SCRIPT API CLIENT
     // ================================================
     async function apiRequest(action, data = {}, method = 'GET') {
-        const scriptUrl = (GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || '').trim();
+        const scriptUrl = (GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || DEFAULT_SCRIPT_URL).trim();
         if (!scriptUrl) {
             throw new Error('La URL de Google Apps Script no está configurada.');
         }
@@ -437,7 +443,7 @@
         const overlay = document.getElementById('configOverlay');
         const input = document.getElementById('configScriptUrl');
         const msg = document.getElementById('configStatusMsg');
-        if (input) input.value = GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || '';
+        if (input) input.value = GOOGLE_SCRIPT_URL || localStorage.getItem('googleScriptUrl') || DEFAULT_SCRIPT_URL;
         if (msg) msg.style.display = 'none';
         if (overlay) {
             overlay.style.display = 'flex';
@@ -2642,26 +2648,8 @@
                     return;
                 }
 
-                // Si la URL de Google Sheets no está configurada aún
                 if (!GOOGLE_SCRIPT_URL) {
-                    // Acceso de emergencia si es admin
-                    if (user.toLowerCase() === 'admin' && pass === 'admin123') {
-                        localStorage.setItem('loggedUser', 'ADMIN');
-                        localStorage.setItem('loggedUserRole', 'admin');
-                        document.getElementById('loginOverlay').style.display = 'none';
-                        document.querySelector('.user-name').innerText = 'ADMIN';
-                        document.querySelector('.user-role').innerText = 'Administrador';
-                        showToast('¡Bienvenido, ADMIN! Conecta la URL de Google Sheets a continuación.', 'info');
-                        window.openConfigModal();
-                        return;
-                    }
-
-                    if (errorMsg) {
-                        errorMsg.innerHTML = '<i class="bi bi-exclamation-triangle"></i> La URL de Google Apps Script no está configurada.<br><a href="javascript:void(0)" onclick="openConfigModal()" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Haz clic aquí para configurarla</a>.';
-                        errorMsg.style.display = 'block';
-                    }
-                    window.openConfigModal();
-                    return;
+                    GOOGLE_SCRIPT_URL = DEFAULT_SCRIPT_URL;
                 }
 
                 // Helper para extraer campos sin importar mayúsculas, minúsculas o acentos
