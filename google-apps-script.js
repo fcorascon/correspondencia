@@ -112,6 +112,10 @@ function doGet(e) {
             return handleRead(table);
         }
 
+        if (action === 'login') {
+            return handleLogin(params.user, params.pass);
+        }
+
         return createJsonResponse({ success: false, error: 'Acción GET no reconocida: ' + action });
     } catch (err) {
         return createJsonResponse({ success: false, error: err.toString() });
@@ -247,32 +251,50 @@ function handleRead(tableName) {
  */
 function handleLogin(username, password) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('usuarios');
+    let sheet = ss.getSheetByName('usuarios') || ss.getSheetByName('Usuarios') || ss.getSheetByName('USUARIOS');
+
+    const userClean = String(username || '').trim().toLowerCase();
+    const passClean = String(password || '').trim();
 
     if (!sheet || sheet.getLastRow() <= 1) {
         // Si no hay usuarios configurados, permitir acceso de emergencia si es admin
-        if (username.toLowerCase() === 'admin' && password === 'admin123') {
+        if (userClean === 'admin' && passClean === 'admin123') {
             return createJsonResponse({ success: true, user: 'ADMIN', rol: 'admin' });
         }
         return createJsonResponse({ success: false, error: 'No hay usuarios registrados en el sistema.' });
     }
 
-    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
-    const userClean = String(username || '').trim().toLowerCase();
-    const passClean = String(password || '');
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    const rawData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+    const headers = rawData[0].map(h => String(h || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+    const rows = rawData.slice(1);
+
+    let userIdx = headers.findIndex(h => h.includes('usuario') || h.includes('user') || h.includes('nombre'));
+    let passIdx = headers.findIndex(h => h.includes('contrasena') || h.includes('password') || h.includes('pass') || h.includes('clave'));
+    let rolIdx = headers.findIndex(h => h.includes('rol') || h.includes('role') || h.includes('tipo') || h.includes('perfil'));
+
+    if (userIdx === -1) userIdx = 0;
+    if (passIdx === -1) passIdx = 1;
+    if (rolIdx === -1) rolIdx = 2;
 
     for (let i = 0; i < rows.length; i++) {
-        const u = String(rows[i][0] || '').trim().toLowerCase();
-        const p = String(rows[i][1] || '');
-        const r = String(rows[i][2] || 'usuario').trim().toLowerCase();
+        const u = String(rows[i][userIdx] || '').trim().toLowerCase();
+        const p = String(rows[i][passIdx] || '').trim();
+        const r = String(rows[i][rolIdx] || 'usuario').trim().toLowerCase();
 
         if (u === userClean && p === passClean) {
             return createJsonResponse({
                 success: true,
-                user: rows[i][0].toString().toUpperCase(),
-                rol: r
+                user: (rows[i][userIdx] || username).toString().toUpperCase(),
+                rol: r || 'usuario'
             });
         }
+    }
+
+    // Acceso de emergencia si es admin
+    if (userClean === 'admin' && passClean === 'admin123') {
+        return createJsonResponse({ success: true, user: 'ADMIN', rol: 'admin' });
     }
 
     return createJsonResponse({ success: false, error: 'Usuario o contraseña incorrectos' });

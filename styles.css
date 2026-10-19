@@ -897,6 +897,14 @@ main {
     z-index: 1000;
 }
 
+.modal-overlay.active {
+    display: flex !important;
+}
+
+#configOverlay {
+    z-index: 2500 !important;
+}
+
 .modal {
     background: white;
     width: 95%;
