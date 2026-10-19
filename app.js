@@ -1,5 +1,5 @@
 (function () {
-    let GOOGLE_SCRIPT_URL = localStorage.getItem('googleScriptUrl') || 'https://script.google.com/macros/s/AKfycbxdj2hCcliJt_YplYhOuEcENinLkunUXflVHGsLa14OsILur_4GTteApNnd7HP4O2c1/exec';
+    let GOOGLE_SCRIPT_URL = localStorage.getItem('googleScriptUrl') || '';
 
     let currentSection = 'recibida';
     let currentEditId = null;
@@ -12,6 +12,7 @@
     let currentPage = 1;
     let pageSize = 20;
     let currentFilter = 'todos';
+    let activeStatFilter = null;
     let sortField = null;
     let sortDir = 'asc';
     let currentView = localStorage.getItem('correspondencia_view') || 'table';
@@ -519,7 +520,6 @@
     async function fetchCatalogs() {
         if (!GOOGLE_SCRIPT_URL) return;
         try {
-            console.log('Cargando catálogos desde Google Sheets...');
             const [autRes, statRes, tipoRes] = await Promise.all([
                 apiRequest('read', { table: 'autorizados' }).catch(() => null),
                 apiRequest('read', { table: 'status' }).catch(() => null),
@@ -544,14 +544,8 @@
                     .filter(Boolean)
                     .map(s => String(s).trim().toUpperCase());
             }
-
-            console.log('Catálogos cargados:', {
-                autorizados: autorizadosData.length,
-                statuses: statusesData.length,
-                tipos: tiposData.length
-            });
-        } catch (e) {
-            console.error('Error al cargar catálogos:', e);
+        } catch (_) {
+            // Silencioso en producción
         }
     }
 
@@ -559,9 +553,7 @@
         if (window._appInitialized) return;
         window._appInitialized = true;
 
-        console.log('Iniciando aplicación con Google Sheets...');
         if (!GOOGLE_SCRIPT_URL) {
-            console.warn('URL de Google Apps Script no configurada.');
             window.openConfigModal();
             return;
         }
@@ -612,7 +604,6 @@
 
             if (!res || !res.success) {
                 const errMsg = res?.error || 'Error al conectar con la hoja de cálculo';
-                console.error('Error en loadData:', errMsg);
                 const grid = document.getElementById('dataGrid');
                 if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de acceso a "${escapeHTML(currentSection)}": ${escapeHTML(errMsg)}</div>`;
                 showToast(`Error al cargar datos: ${errMsg}`, 'error');
@@ -647,12 +638,101 @@
             currentPage = 1;
             applyFiltersAndRender(true);
         } catch (error) {
-            console.error('Excepción al cargar datos:', error);
             const grid = document.getElementById('dataGrid');
             if (grid) grid.innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff4444;">Error de conexión con Google Sheets: ${escapeHTML(error.message)}</div>`;
             showToast(`Error al cargar datos: ${error.message}`, 'error');
         }
     }
+
+    const statFiltersConfig = {
+        iniciativas: {
+            comision: (item) => {
+                const com = getItemValue(item, 'comision');
+                const dict = getItemValue(item, 'dictaminada_favor_contra');
+                return !!(com && com !== 'SIN COMISIÓN' && !dict);
+            },
+            dictaminadas: (item) => {
+                const dict = getItemValue(item, 'dictaminada_favor_contra');
+                const pleno = getItemValue(item, 'fecha_pleno');
+                return !!(dict || pleno);
+            },
+            dictamen: (item) => {
+                const dict = getItemValue(item, 'dictaminada_favor_contra');
+                const pleno = getItemValue(item, 'fecha_pleno');
+                return !!(dict || pleno);
+            },
+            decreto: (item) => {
+                const dec = getItemValue(item, 'decreto');
+                const pDec = getItemValue(item, 'proyecto_decreto');
+                return !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
+            },
+            oficialia: (item) => {
+                const com = getItemValue(item, 'comision');
+                const dict = getItemValue(item, 'dictaminada_favor_contra');
+                const pleno = getItemValue(item, 'fecha_pleno');
+                return !dict && !pleno && (!com || com === 'SIN COMISIÓN');
+            }
+        },
+        recibida: {
+            eventos: (item) => {
+                const ev = getItemValue(item, 'fecha_evento');
+                return !!(ev && String(ev).trim() && String(ev).trim() !== '-');
+            },
+            archivos: (item) => {
+                const pdf = getItemValue(item, 'PDF-Imagen');
+                return !!(pdf && String(pdf).trim() && String(pdf).trim() !== '-');
+            },
+            mes: (item) => {
+                const now = new Date();
+                const dt = parseDate(getItemValue(item, 'Fecha_Recibido'));
+                return !!(dt && dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear());
+            }
+        },
+        despachada: {
+            pendientes: (item) => {
+                const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                return !st || st.includes('pendiente') || st.includes('proceso') || st.includes('tramite') || st.includes('trámite');
+            },
+            entregados: (item) => {
+                const st = String(getItemValue(item, 'Estatus') || '').toLowerCase();
+                return st.includes('entregad') || st.includes('concluid') || st.includes('atendid') || st.includes('notificad') || st.includes('recibid');
+            },
+            mes: (item) => {
+                const now = new Date();
+                const dt = parseDate(getItemValue(item, 'Fecha'));
+                return !!(dt && dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear());
+            }
+        },
+        proposiciones: {
+            pleno: (item) => {
+                const pleno = getItemValue(item, 'fecha_pleno');
+                const vot = getItemValue(item, 'resultado_votacion');
+                return !!(pleno || vot);
+            },
+            respuesta: (item) => {
+                const resp = getItemValue(item, 'fecha_respuesta_autoridad') || getItemValue(item, 'respuesta_acuerdo');
+                return !!(resp && String(resp).trim() && String(resp).trim() !== '-');
+            },
+            turnadas: (item) => {
+                const turn = getItemValue(item, 'turnado_comision');
+                return !!(turn && String(turn).trim());
+            }
+        },
+        fiscalizacion: {
+            favor: (item) => {
+                const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || getItemValue(item, 'dictamen') || '').toUpperCase();
+                return voto.includes('A FAVOR') || voto.includes('FAVOR');
+            },
+            contra: (item) => {
+                const voto = String(getItemValue(item, 'voto_diputada') || getItemValue(item, 'voto_final') || getItemValue(item, 'fallo') || getItemValue(item, 'dictamen') || '').toUpperCase();
+                return voto.includes('EN CONTRA') || voto.includes('CONTRA');
+            },
+            observaciones: (item) => {
+                const obs = String(getItemValue(item, 'observaciones') || '').toUpperCase();
+                return !!(obs && !obs.includes('NO SE GENERARON') && !obs.includes('NO SE PRESENTARON') && (obs.includes('OBSERVACI') || obs.includes('RECOMENDACI') || obs.includes('PRAS') || obs.includes('PEFCF')));
+            }
+        }
+    };
 
     const sectionStatsConfig = {
         recibida: [
@@ -693,8 +773,9 @@
         const config = sectionStatsConfig[section] || sectionStatsConfig.recibida;
         let html = '';
         config.forEach(c => {
+            const isActive = activeStatFilter === c.id;
             html += `
-                <div class="stat-card" data-stat-id="${c.id}">
+                <div class="stat-card ${isActive ? 'active' : ''}" data-stat-id="${c.id}" onclick="filterByStat('${c.id}')" title="Clic para filtrar por ${escapeHTML(c.label)}">
                     <div class="stat-icon-wrap ${c.iconClass}">
                         <i class="bi ${c.icon}"></i>
                     </div>
@@ -793,8 +874,9 @@
         let html = '';
         const values = [counts.card0, counts.card1, counts.card2, counts.card3];
         config.forEach((c, idx) => {
+            const isActive = activeStatFilter === c.id;
             html += `
-                <div class="stat-card" data-stat-id="${c.id}">
+                <div class="stat-card ${isActive ? 'active' : ''}" data-stat-id="${c.id}" onclick="filterByStat('${c.id}')" title="Clic para filtrar por ${escapeHTML(c.label)}">
                     <div class="stat-icon-wrap ${c.iconClass}">
                         <i class="bi ${c.icon}"></i>
                     </div>
@@ -802,6 +884,7 @@
                         <span class="stat-count">${values[idx].toLocaleString()}</span>
                         <span class="stat-label" title="${escapeHTML(c.label)}">${escapeHTML(c.label)}</span>
                     </div>
+                    ${isActive ? '<span class="stat-filter-badge" title="Filtro activo"><i class="bi bi-funnel-fill"></i></span>' : ''}
                 </div>
             `;
         });
@@ -902,7 +985,19 @@
                     const dict = getItemValue(item, 'dictaminada_favor_contra');
                     const pleno = getItemValue(item, 'fecha_pleno');
                     const dec = getItemValue(item, 'decreto');
-                    return !!(dict || pleno || dec);
+                    const pDec = getItemValue(item, 'proyecto_decreto');
+                    const hasDec = !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
+                    return !!(dict || pleno) && !hasDec;
+                }
+            },
+            {
+                id: 'decreto',
+                title: 'Con Decreto / Aprobadas',
+                icon: 'bi-award',
+                filter: (item) => {
+                    const dec = getItemValue(item, 'decreto');
+                    const pDec = getItemValue(item, 'proyecto_decreto');
+                    return !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
                 }
             }
         ],
@@ -1140,11 +1235,15 @@
         // Renderizar cada columna
         colsConfig.forEach(col => {
             const items = colItemsMap[col.id] || [];
+            const isColActive = activeStatFilter === col.id || (activeStatFilter === 'dictaminadas' && col.id === 'dictamen');
             const colElem = document.createElement('div');
-            colElem.className = 'kanban-column';
+            colElem.className = 'kanban-column' + (isColActive ? ' kanban-column-active' : '');
 
             const colHeader = document.createElement('div');
             colHeader.className = 'kanban-col-header';
+            colHeader.style.cursor = 'pointer';
+            colHeader.title = `Clic para filtrar por ${col.title}`;
+            colHeader.onclick = () => filterByStat(col.id === 'dictamen' ? 'dictaminadas' : col.id);
             colHeader.innerHTML = `
                 <div class="kanban-col-title">
                     <i class="bi ${col.icon}"></i>
@@ -1627,10 +1726,76 @@
             });
         }
 
+        if (activeStatFilter && activeStatFilter !== 'total') {
+            const filterFn = statFiltersConfig[currentSection]?.[activeStatFilter];
+            if (filterFn) {
+                filtered = filtered.filter(filterFn);
+            }
+        }
+
         currentFilteredData = filtered;
         if (resetPage) currentPage = 1;
+        updateActiveFilterChip();
         renderGrid();
     }
+
+    function updateActiveFilterChip() {
+        const filtersContainer = document.getElementById('tableFilters');
+        if (!filtersContainer) return;
+
+        let chip = document.getElementById('activeStatFilterChip');
+        if (!activeStatFilter || activeStatFilter === 'total') {
+            if (chip) chip.remove();
+            return;
+        }
+
+        const config = sectionStatsConfig[currentSection] || [];
+        const statItem = config.find(c => c.id === activeStatFilter || (activeStatFilter === 'dictamen' && c.id === 'dictaminadas'));
+        const label = statItem ? statItem.label : activeStatFilter;
+
+        if (!chip) {
+            chip = document.createElement('span');
+            chip.id = 'activeStatFilterChip';
+            chip.className = 'active-filter-chip';
+            filtersContainer.appendChild(chip);
+        }
+
+        chip.innerHTML = `
+            <i class="bi bi-funnel-fill"></i>
+            <span>Filtro: ${escapeHTML(label)} (${currentFilteredData.length})</span>
+            <span class="chip-close" onclick="filterByStat(null)" title="Quitar filtro">✕</span>
+        `;
+    }
+
+    window.filterByStat = function (statId) {
+        if (!statId || statId === 'total' || activeStatFilter === statId) {
+            activeStatFilter = null;
+        } else {
+            activeStatFilter = statId;
+        }
+
+        // Sincronizar clases visuales en las tarjetas
+        document.querySelectorAll('.stat-card').forEach(card => {
+            const id = card.dataset.statId;
+            const isActive = !!(activeStatFilter && (id === activeStatFilter || (activeStatFilter === 'dictamen' && id === 'dictaminadas')));
+            card.classList.toggle('active', isActive);
+
+            const badge = card.querySelector('.stat-filter-badge');
+            if (isActive) {
+                if (!badge) {
+                    const newBadge = document.createElement('span');
+                    newBadge.className = 'stat-filter-badge';
+                    newBadge.title = 'Filtro activo';
+                    newBadge.innerHTML = '<i class="bi bi-funnel-fill"></i>';
+                    card.appendChild(newBadge);
+                }
+            } else {
+                if (badge) badge.remove();
+            }
+        });
+
+        applyFiltersAndRender(true);
+    };
 
     function switchSection(section) {
         currentSection = section;
@@ -1652,6 +1817,8 @@
         });
 
         currentFilter = 'todos';
+        activeStatFilter = null;
+        updateActiveFilterChip();
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         const allBtn = Array.from(document.querySelectorAll('.filter-btn')).find(b => b.innerText.toLowerCase().includes('todos'));
         if (allBtn) allBtn.classList.add('active');
@@ -1873,7 +2040,7 @@
                                     currentData.map(opt => `<option value="${escapeHTML(opt)}" ${valTarget === opt ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('');
                             }
                         }
-                    }).catch(err => console.warn('Error al refrescar catálogos para select:', err));
+                    }).catch(() => { /* Silencioso */ });
                 }
             } else if (field.type === 'textarea') {
                 div.innerHTML = `
@@ -2472,8 +2639,8 @@
                                 };
                             }
                         }
-                    } catch (readErr) {
-                        console.warn('Lectura de usuarios falló, probando POST login:', readErr);
+                    } catch (_) {
+                        // Silencioso, se intenta el login por POST
                     }
 
                     if (!authenticated) {
@@ -2581,9 +2748,19 @@
                 targetBtn.classList.add('active');
 
                 const text = (targetBtn.innerText || targetBtn.textContent || '').trim().toLowerCase();
-                if (text.includes('todos')) currentFilter = 'todos';
-                else if (text.includes('recientes')) currentFilter = 'recientes';
-                else if (text.includes('archivados')) currentFilter = 'archivados';
+                if (text.includes('todos')) {
+                    currentFilter = 'todos';
+                    activeStatFilter = null;
+                    document.querySelectorAll('.stat-card').forEach(c => {
+                        c.classList.remove('active');
+                        const b = c.querySelector('.stat-filter-badge');
+                        if (b) b.remove();
+                    });
+                } else if (text.includes('recientes')) {
+                    currentFilter = 'recientes';
+                } else if (text.includes('archivados')) {
+                    currentFilter = 'archivados';
+                }
 
                 applyFiltersAndRender(true);
             };
