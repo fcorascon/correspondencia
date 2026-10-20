@@ -27,7 +27,7 @@ const FOLDER_NAME = 'Correspondencia_Adjuntos';
 const SCHEMAS = {
     recibida: ['id', 'Fecha_Recibido', 'Remite', 'Asunto', 'Recibio', 'fecha_evento', 'HORA', 'Lugar', 'TELEFONO', 'CORREO', 'PDF-Imagen'],
     despachada: ['id', 'Fecha', 'Elaboro', 'Dirigido', 'Asunto', 'Estatus', 'Recibió', 'Fecha_recepcion', 'TELEFONO', 'CORREO', 'Archivos y multimedia'],
-    iniciativas: ['id', 'fecha_oficio', 'fecha_presentacion_oficialia', 'texto', 'comision', 'fecha_turno_legis', 'fecha_pleno', 'dictaminada_favor_contra', 'decreto', 'objeto', 'pdf', 'opinion_consultoria', 'proyecto_dictamen', 'proyecto_decreto'],
+    iniciativas: ['id', 'fecha_oficio', 'fecha_presentacion_oficialia', 'texto', 'comision', 'fecha_turno_legis', 'fecha_pleno', 'dictaminada_favor_contra', 'opinion', 'decreto', 'objeto', 'pdf', 'opinion_consultoria', 'proyecto_dictamen', 'proyecto_decreto'],
     proposiciones: ['id', 'fecha_ingreso_procepar', 'fecha_pleno', 'proposicion', 'resultado_votacion', 'fecha_acuse_recibido_autoridad', 'fecha_respuesta_autoridad', 'tipo', 'objetivo', 'turnado_comision', 'acuerdo', 'respuesta_acuerdo', 'anotaciones', 'pdf_foto'],
     fisca: ['id', 'ano', 'fecha_sesion', 'dictamen_no', 'dependencia', 'observaciones', 'dictamen', 'voto_diputada', 'voto_final', 'fallo'],
     autorizados: ['nombre'],

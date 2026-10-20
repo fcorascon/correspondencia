@@ -55,6 +55,7 @@
             { id: 'fecha_turno_legis', name: 'TURNO LEGIS', type: 'date' },
             { id: 'fecha_pleno', name: 'PLENO', type: 'date' },
             { id: 'dictaminada_favor_contra', name: 'DICTAMEN', type: 'text' },
+            { id: 'opinion', name: 'OPINIÓN', type: 'select', options: ['PROCEDENTE', 'IMPROCEDENTE', 'EN TRÁMITE'] },
             { id: 'decreto', name: 'DECRETO', type: 'text' },
             { id: 'objeto', name: 'OBJETO', type: 'text', full: true },
             { id: 'pdf', name: 'PDF', type: 'file', maxFiles: 10 },
@@ -102,11 +103,16 @@
 
     function getItemValue(item, key) {
         if (!item) return '';
-        if (item[key] !== undefined && item[key] !== null) return item[key];
-        const upperKey = key.toUpperCase();
-        if (item[upperKey] !== undefined && item[upperKey] !== null) return item[upperKey];
-        const lowerKey = key.toLowerCase();
-        if (item[lowerKey] !== undefined && item[lowerKey] !== null) return item[lowerKey];
+        let val = undefined;
+        if (item[key] !== undefined && item[key] !== null) val = item[key];
+        else {
+            const upperKey = key.toUpperCase();
+            if (item[upperKey] !== undefined && item[upperKey] !== null) val = item[upperKey];
+            else {
+                const lowerKey = key.toLowerCase();
+                if (item[lowerKey] !== undefined && item[lowerKey] !== null) val = item[lowerKey];
+            }
+        }
 
         const aliases = {
             'ano': ['ano', 'AÑO', 'año', 'ejercicio', 'ANIO'],
@@ -129,15 +135,48 @@
             'fecha_pleno': ['fecha_pleno', 'FECHA_PLENO', 'FECHA PLENO', 'PLENO'],
             'fecha_ingreso_procepar': ['fecha_ingreso_procepar', 'FECHA_INGRESO_PROCEPAR', 'INGRESO PROCEPAR', 'INGRESO_PROCEPAR'],
             'fecha_acuse_recibido_autoridad': ['fecha_acuse_recibido_autoridad', 'FECHA_ACUSE_RECIBIDO_AUTORIDAD', 'ACUSE AUTORIDAD', 'ACUSE_AUTORIDAD'],
-            'fecha_respuesta_autoridad': ['fecha_respuesta_autoridad', 'FECHA_RESPUESTA_AUTORIDAD', 'RESPUESTA AUTORIDAD', 'RESPUESTA_AUTORIDAD']
+            'fecha_respuesta_autoridad': ['fecha_respuesta_autoridad', 'FECHA_RESPUESTA_AUTORIDAD', 'RESPUESTA AUTORIDAD', 'RESPUESTA_AUTORIDAD'],
+            'opinion': ['opinion', 'OPINION', 'OPINIÓN', 'sentido_opinion', 'opinion_sentido'],
+            'dictaminada_favor_contra': ['dictaminada_favor_contra', 'DICTAMINADA_FAVOR_CONTRA', 'dictamen', 'DICTAMEN', 'sentido_dictamen', 'sentido'],
+            'decreto': ['decreto', 'DECRETO', 'num_decreto', 'numero_decreto']
         };
 
-        if (aliases[key]) {
+        if ((val === undefined || val === null || (typeof val === 'string' && val.trim().toUpperCase() === 'NULL')) && aliases[key]) {
             for (let alt of aliases[key]) {
-                if (item[alt] !== undefined && item[alt] !== null) return item[alt];
+                const altVal = item[alt];
+                if (altVal !== undefined && altVal !== null) {
+                    if (typeof altVal === 'string' && (altVal.trim().toUpperCase() === 'NULL' || altVal.trim().toUpperCase() === 'UNDEFINED')) {
+                        continue;
+                    }
+                    val = altVal;
+                    break;
+                }
             }
         }
-        return '';
+
+        if (val === undefined || val === null) return '';
+        if (typeof val === 'string') {
+            const upper = val.trim().toUpperCase();
+            if (upper === 'NULL' || upper === 'UNDEFINED') return '';
+        }
+        return val;
+    }
+
+    function hasFieldInfo(val) {
+        if (val === null || val === undefined) return false;
+        const s = String(val).trim();
+        if (!s) return false;
+        const up = s.toUpperCase();
+        return up !== 'NULL' && up !== 'UNDEFINED' && up !== '-' && up !== '—' && up !== 'N/A' && up !== 'NA' && up !== 'NO APLICA' && up !== 'SIN INFORMACION' && up !== 'SIN INFORMACIÓN' && up !== 'PENDIENTE';
+    }
+
+    function hasValidComision(com) {
+        if (!hasFieldInfo(com)) return false;
+        const up = String(com).trim().toUpperCase();
+        if (up.includes('SIN COMIS') || up.includes('SE RETIR') || up.includes('RETIRO') || up.includes('NO APLICA') || up.includes('PENDIENTE')) {
+            return false;
+        }
+        return true;
     }
 
     function parseDate(str) {
@@ -660,29 +699,31 @@
         iniciativas: {
             comision: (item) => {
                 const com = getItemValue(item, 'comision');
-                const dict = getItemValue(item, 'dictaminada_favor_contra');
-                return !!(com && com !== 'SIN COMISIÓN' && !dict);
+                const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                const dec = getItemValue(item, 'decreto');
+                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
+                return hasValidComision(com) && !isDictPleno && !hasFieldInfo(dec);
             },
             dictaminadas: (item) => {
-                const dict = getItemValue(item, 'dictaminada_favor_contra');
-                const pleno = getItemValue(item, 'fecha_pleno');
-                return !!(dict || pleno);
+                const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                const dec = getItemValue(item, 'decreto');
+                return hasFieldInfo(dict) && hasFieldInfo(dec);
             },
             dictamen: (item) => {
-                const dict = getItemValue(item, 'dictaminada_favor_contra');
-                const pleno = getItemValue(item, 'fecha_pleno');
-                return !!(dict || pleno);
+                const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                const dec = getItemValue(item, 'decreto');
+                return hasFieldInfo(dict) && hasFieldInfo(dec);
             },
             decreto: (item) => {
                 const dec = getItemValue(item, 'decreto');
-                const pDec = getItemValue(item, 'proyecto_decreto');
-                return !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
+                return hasFieldInfo(dec);
             },
             oficialia: (item) => {
                 const com = getItemValue(item, 'comision');
-                const dict = getItemValue(item, 'dictaminada_favor_contra');
-                const pleno = getItemValue(item, 'fecha_pleno');
-                return !dict && !pleno && (!com || com === 'SIN COMISIÓN');
+                const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                const dec = getItemValue(item, 'decreto');
+                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
+                return !isDictPleno && !hasFieldInfo(dec) && !hasValidComision(com);
             }
         },
         recibida: {
@@ -846,17 +887,18 @@
             });
         } else if (currentSection === 'iniciativas') {
             data.forEach(item => {
-                // En Comision
                 const com = getItemValue(item, 'comision');
-                const dict = getItemValue(item, 'dictaminada_favor_contra');
-                if (com && com !== 'SIN COMISIÓN' && !dict) counts.card1++;
-                // Dictaminadas / Pleno
-                const pleno = getItemValue(item, 'fecha_pleno');
-                if (dict || pleno) counts.card2++;
-                // Con Decreto
+                const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 const dec = getItemValue(item, 'decreto');
-                const pDec = getItemValue(item, 'proyecto_decreto');
-                if ((dec && String(dec).trim()) || (pDec && String(pDec).trim() && String(pDec).trim() !== '-')) counts.card3++;
+                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
+                const hasDec = hasFieldInfo(dec);
+
+                // En Comision (con nombre de comisión válido asignado)
+                if (hasValidComision(com) && !isDictPleno && !hasDec) counts.card1++;
+                // Dictaminadas / Pleno (ambos campos con información real)
+                if (isDictPleno) counts.card2++;
+                // Con Decreto
+                if (hasDec) counts.card3++;
             });
         } else if (currentSection === 'proposiciones') {
             data.forEach(item => {
@@ -973,9 +1015,11 @@
                 icon: 'bi-file-earmark-plus',
                 filter: (item) => {
                     const com = getItemValue(item, 'comision');
-                    const dict = getItemValue(item, 'dictaminada_favor_contra');
-                    const pleno = getItemValue(item, 'fecha_pleno');
-                    return !dict && !pleno && (!com || com === 'SIN COMISIÓN');
+                    const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                    const dec = getItemValue(item, 'decreto');
+                    const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
+                    const hasDec = hasFieldInfo(dec);
+                    return !isDictPleno && !hasDec && !hasValidComision(com);
                 }
             },
             {
@@ -984,9 +1028,11 @@
                 icon: 'bi-hourglass-split',
                 filter: (item) => {
                     const com = getItemValue(item, 'comision');
-                    const dict = getItemValue(item, 'dictaminada_favor_contra');
-                    const pleno = getItemValue(item, 'fecha_pleno');
-                    return !dict && !pleno && com && com !== 'SIN COMISIÓN';
+                    const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
+                    const dec = getItemValue(item, 'decreto');
+                    const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
+                    const hasDec = hasFieldInfo(dec);
+                    return !isDictPleno && !hasDec && hasValidComision(com);
                 }
             },
             {
@@ -994,12 +1040,9 @@
                 title: 'Dictaminadas / Pleno',
                 icon: 'bi-clipboard2-check',
                 filter: (item) => {
-                    const dict = getItemValue(item, 'dictaminada_favor_contra');
-                    const pleno = getItemValue(item, 'fecha_pleno');
+                    const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                     const dec = getItemValue(item, 'decreto');
-                    const pDec = getItemValue(item, 'proyecto_decreto');
-                    const hasDec = !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
-                    return !!(dict || pleno) && !hasDec;
+                    return hasFieldInfo(dict) && hasFieldInfo(dec);
                 }
             },
             {
@@ -1008,8 +1051,7 @@
                 icon: 'bi-award',
                 filter: (item) => {
                     const dec = getItemValue(item, 'decreto');
-                    const pDec = getItemValue(item, 'proyecto_decreto');
-                    return !!((dec && String(dec).trim() && String(dec).trim() !== '-') || (pDec && String(pDec).trim() && String(pDec).trim() !== '-'));
+                    return hasFieldInfo(dec);
                 }
             }
         ],
@@ -1168,6 +1210,15 @@
             if (com) metaBadges.push(`<span class="badge badge-info">${escapeHTML(com)}</span>`);
             const dict = getItemValue(item, 'dictaminada_favor_contra');
             if (dict) metaBadges.push(`<span class="badge badge-success">${escapeHTML(dict)}</span>`);
+            const op = getItemValue(item, 'opinion');
+            if (op) {
+                let badgeClass = 'badge-info';
+                const opUp = op.toUpperCase();
+                if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
+                else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
+                else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
+                metaBadges.push(`<span class="badge ${badgeClass}">${escapeHTML(op)}</span>`);
+            }
             fileLinks = renderFileLinks(getItemValue(item, 'pdf'));
         } else if (currentSection === 'proposiciones') {
             titleVal = `Proposición #${item.id || ''}`;
@@ -1573,6 +1624,15 @@
                     subtitleVal = getItemValue(item, 'texto') || getItemValue(item, 'INICIATIVA');
                     detailVal = getItemValue(item, 'comision') || 'SIN COMISIÓN';
                     metaHtml = `<span class="badge badge-warning">${escapeHTML(formatDateDMY(getItemValue(item, 'fecha_oficio')) || 'OFICIO')}</span>`;
+                    const op = getItemValue(item, 'opinion');
+                    if (op) {
+                        let badgeClass = 'badge-info';
+                        const opUp = op.toUpperCase();
+                        if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
+                        else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
+                        else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
+                        metaHtml += ` <span class="badge ${badgeClass}">${escapeHTML(op)}</span>`;
+                    }
                     const inicFileFields = [
                         ['pdf', 'PDF'],
                         ['opinion_consultoria', 'OP. CONSULTORÍA'],
