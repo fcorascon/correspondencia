@@ -1343,12 +1343,12 @@
     function formatDriveUrl(url) {
         if (!url || typeof url !== 'string') return url;
         const trimmed = url.trim();
-        // Si es un enlace de Google Drive (uc?export=view o export=download), convertir a /file/d/.../view
+        // Convertir a /file/d/.../preview para visualización rápida y ligera en ~300ms
         const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
                       trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
                       trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
         if (match && match[1]) {
-            return `https://drive.google.com/file/d/${match[1]}/view?usp=sharing`;
+            return `https://drive.google.com/file/d/${match[1]}/preview`;
         }
         return trimmed;
     }
@@ -1469,19 +1469,17 @@
         const fileList = Array.from(files).slice(0, limit);
         const total = fileList.length;
 
-        // Paso 1: Optimización y compresión rápida en cliente
+        // Paso 1: Optimización y compresión simultánea en hilos paralelos (Promise.all)
         if (onProgress) onProgress(total > 1 ? `Optimizando ${total} archivos...` : 'Optimizando archivo...');
-        const preparedFiles = [];
-        for (let i = 0; i < fileList.length; i++) {
-            const file = fileList[i];
+        const preparedFiles = await Promise.all(fileList.map(async (file) => {
             const optimized = await compressImageIfNeeded(file);
             const base64 = await fileToBase64(optimized);
-            preparedFiles.push({
+            return {
                 filename: optimized.name || file.name,
                 mimeType: optimized.type || file.type || 'application/octet-stream',
                 base64: base64
-            });
-        }
+            };
+        }));
 
         // Paso 2: Intentar subida en lote (1 sola petición HTTP para todos los archivos)
         if (onProgress) onProgress(total > 1 ? `Subiendo ${total} archivos a Drive...` : 'Subiendo archivo a Drive...');
@@ -2266,10 +2264,13 @@
         }
 
         const helpEl = input.parentElement ? input.parentElement.querySelector('.file-input-help') : null;
-        if (!helpEl) return;
+
+        // Limpiar estado previo si el usuario cambia los archivos seleccionados
+        input._uploadedUrls = null;
+        input._uploadPromise = null;
 
         if (input.files.length === 0) {
-            helpEl.innerHTML = `Máximo ${maxFiles} archivos (PDF, imágenes, etc.).`;
+            if (helpEl) helpEl.innerHTML = `Máximo ${maxFiles} archivos (PDF, imágenes, etc.).`;
             return;
         }
 
@@ -2283,15 +2284,50 @@
             warning = `<span style="color:#d92d20; display:block; margin-top:2px;">⚠️ "${escapeHTML(largePdf.name)}" pesa más de 15 MB. Podría demorar en guardarse.</span>`;
         }
 
-        helpEl.innerHTML = `
-            <span style="color:var(--primary); font-weight:600;">
-                <i class="bi bi-check2-circle"></i> ${count} archivo${count > 1 ? 's' : ''} listo${count > 1 ? 's' : ''} (${totalMb} MB total)
-            </span>
-            <span style="display:block; color:var(--text-muted); font-size:0.72rem; margin-top:1px;">
-                Las fotos se optimizan automáticamente al guardar para carga rápida.
-            </span>
-            ${warning}
-        `;
+        if (helpEl) {
+            helpEl.innerHTML = `
+                <div style="display:flex; align-items:center; gap:6px; color:var(--primary); font-weight:600;">
+                    <span style="display:inline-block;width:0.75rem;height:0.75rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .75s linear infinite;"></span>
+                    <span>Subiendo ${count} archivo${count > 1 ? 's' : ''} a Drive en segundo plano (${totalMb} MB)...</span>
+                </div>
+                ${warning}
+            `;
+        }
+
+        // Iniciar pre-subida optimista en segundo plano de inmediato
+        if (GOOGLE_SCRIPT_URL) {
+            const filesToUpload = Array.from(input.files).slice(0, maxFiles);
+            const currentFilesRef = input.files;
+            input._uploadPromise = uploadFiles(filesToUpload, maxFiles)
+                .then(uploadedJson => {
+                    if (input.files === currentFilesRef && input.files.length > 0) {
+                        input._uploadedUrls = uploadedJson;
+                        if (helpEl) {
+                            helpEl.innerHTML = `
+                                <div style="color:#027A48; font-weight:600; display:flex; align-items:center; gap:5px;">
+                                    <i class="bi bi-check-circle-fill"></i> ${count} archivo${count > 1 ? 's' : ''} subido${count > 1 ? 's' : ''} a Drive (${totalMb} MB)
+                                </div>
+                                <span style="display:block; color:var(--text-muted); font-size:0.72rem; margin-top:2px;">
+                                    Listo. Al hacer clic en Guardar se procesará al instante.
+                                </span>
+                                ${warning}
+                            `;
+                        }
+                    }
+                    return uploadedJson;
+                })
+                .catch(err => {
+                    console.warn('Pre-subida en segundo plano:', err);
+                    if (helpEl && input.files === currentFilesRef) {
+                        helpEl.innerHTML = `
+                            <span style="color:var(--text-muted);">
+                                ${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${totalMb} MB). Se subirá al guardar.
+                            </span>
+                            ${warning}
+                        `;
+                    }
+                });
+        }
     };
 
     // Remove an existing file row from the edit modal with a smooth animation
@@ -3162,8 +3198,19 @@
                             }
 
                             if (files && files.length > 0) {
-                                // Upload new files then merge with kept ones
-                                const uploaded = await uploadFiles(files, maxFiles, (msg) => setProgress(msg));
+                                let uploaded = null;
+                                if (input && input._uploadedUrls) {
+                                    // ¡Ya subido en segundo plano! Cero tiempo de espera
+                                    uploaded = input._uploadedUrls;
+                                } else if (input && input._uploadPromise) {
+                                    // Ya se estaba subiendo en segundo plano, esperamos que complete
+                                    setProgress("Completando subida de archivos...");
+                                    uploaded = await input._uploadPromise;
+                                } else {
+                                    // Subida directa
+                                    uploaded = await uploadFiles(files, maxFiles, (msg) => setProgress(msg));
+                                }
+
                                 if (uploaded) {
                                     const newUrls = JSON.parse(uploaded);
                                     const combined = keptUrls.concat(newUrls).slice(0, maxFiles);

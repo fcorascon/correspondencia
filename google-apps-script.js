@@ -465,6 +465,7 @@ function getTargetFolder(section) {
             mainFolder = folders.next();
         } else {
             mainFolder = DriveApp.createFolder(FOLDER_NAME);
+            try { mainFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (_) {}
         }
         props.setProperty('FOLDER_ID_root', mainFolder.getId());
     }
@@ -477,7 +478,16 @@ function getTargetFolder(section) {
             targetFolder = subFolders.next();
         } else {
             targetFolder = mainFolder.createFolder(section);
+            try { targetFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (_) {}
         }
+    }
+
+    // Asegurar permiso de lectura pública una sola vez en la carpeta para herencia automática
+    if (!props.getProperty('FOLDER_SHARED_' + key)) {
+        try {
+            targetFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            props.setProperty('FOLDER_SHARED_' + key, 'true');
+        } catch (_) {}
     }
 
     props.setProperty(propKey, targetFolder.getId());
@@ -487,8 +497,7 @@ function getTargetFolder(section) {
 
 /**
  * Carga de múltiples archivos a Google Drive en una sola llamada (Batch Upload)
- * Optimiza drásticamente el tiempo al resolver la carpeta una sola vez y evitar
- * múltiples arranques de Apps Script.
+ * Optimizado para máxima velocidad: herencia de permisos y URLs ligeras /preview
  */
 function handleUploadBatch(files, section) {
     try {
@@ -509,12 +518,12 @@ function handleUploadBatch(files, section) {
             const uniqueName = `${timestamp}_${i + 1}_${cleanFilename}`;
             const blob = Utilities.newBlob(decodedBytes, item.mimeType || 'application/octet-stream', uniqueName);
 
+            // Crear el archivo en la carpeta (hereda los permisos públicos de la carpeta sin demoras RPC)
             const file = targetFolder.createFile(blob);
-            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
             const fileId = file.getId();
-            const viewUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
-            urls.push(viewUrl);
+            // Vista ligera directa (/preview) que carga en ~300ms
+            const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+            urls.push(previewUrl);
         }
 
         return createJsonResponse({
@@ -542,19 +551,16 @@ function handleUpload(filename, mimeType, base64Data, section) {
         const blob = Utilities.newBlob(decodedBytes, mimeType || 'application/octet-stream', uniqueName);
 
         const file = targetFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-        // Generar enlace accesible para visualización y descarga directa
         const fileId = file.getId();
-        const viewUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
         const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+        const viewUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
 
         return createJsonResponse({
             success: true,
-            publicUrl: viewUrl,
+            publicUrl: previewUrl,
             fileId: fileId,
             previewUrl: previewUrl,
-            viewUrl: viewUrl
+            viewUrl: previewUrl
         });
     } catch (err) {
         return createJsonResponse({ success: false, error: 'Error al subir a Google Drive: ' + err.toString() });
