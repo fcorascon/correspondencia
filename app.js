@@ -1481,19 +1481,27 @@
             };
         }));
 
-        // Paso 2: Intentar subida en lote (1 sola petición HTTP para todos los archivos)
-        if (onProgress) onProgress(total > 1 ? `Subiendo ${total} archivos a Drive...` : 'Subiendo archivo a Drive...');
-        try {
-            const batchRes = await apiRequest('upload_batch', {
-                files: preparedFiles,
-                section: currentSection
-            }, 'POST');
+        // Paso 2: Evaluar si el tamaño combinado permite lote o requiere subida individual
+        // Un archivo de hasta 30 MB en Base64 pesa ~40 MB. El límite HTTP de Google Apps Script es 50 MB.
+        // Si el lote combinado pesa menos de 25 MB se sube en un solo viaje; si es mayor, se envían 1 por 1
+        // para garantizar que archivos grandes de hasta 30 MB nunca excedan el límite de Google.
+        const totalBase64Length = preparedFiles.reduce((acc, f) => acc + (f.base64 ? f.base64.length : 0), 0);
+        const canUseBatch = totalBase64Length < 25 * 1024 * 1024;
 
-            if (batchRes && batchRes.success && Array.isArray(batchRes.urls)) {
-                return JSON.stringify(batchRes.urls);
+        if (canUseBatch) {
+            if (onProgress) onProgress(total > 1 ? `Subiendo ${total} archivos a Drive...` : 'Subiendo archivo a Drive...');
+            try {
+                const batchRes = await apiRequest('upload_batch', {
+                    files: preparedFiles,
+                    section: currentSection
+                }, 'POST');
+
+                if (batchRes && batchRes.success && Array.isArray(batchRes.urls)) {
+                    return JSON.stringify(batchRes.urls);
+                }
+            } catch (batchErr) {
+                console.warn('Subida por lote no disponible o excedió límite, usando subida individual:', batchErr);
             }
-        } catch (batchErr) {
-            console.warn('Subida por lote no disponible o rechazada, usando subida directa:', batchErr);
         }
 
         // Paso 3: Fallback a subida individual (para compatibilidad con scripts existentes)
@@ -2177,7 +2185,7 @@
                     <label>${escapeHTML(field.name)} ${reqStar}</label>
                     ${existingFilesHtml}
                     <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="window.handleFileInputChange(this, ${maxFiles})">
-                    <div class="file-input-help" style="margin-top: 4px; font-size: 0.75rem; color: var(--text-muted);">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</div>
+                    <div class="file-input-help" style="margin-top: 4px; font-size: 0.75rem; color: var(--text-muted);">Máximo ${maxFiles} archivos de hasta 30 MB c/u (PDF, imágenes, etc.).</div>
                 `;
             } else if (field.type === 'select') {
                 const valTarget = String(rawValue || '').toUpperCase().trim();
@@ -2256,7 +2264,15 @@
 
     window.handleFileInputChange = function (input, maxFiles) {
         if (!input || !input.files) return;
-        if (input.files.length > maxFiles) {
+
+        const MAX_FILE_SIZE = 30 * 1024 * 1024; // Límite de 30 MB por archivo
+        const overLimit = Array.from(input.files).filter(f => f.size > MAX_FILE_SIZE);
+        if (overLimit.length > 0) {
+            const dt = new DataTransfer();
+            Array.from(input.files).filter(f => f.size <= MAX_FILE_SIZE).slice(0, maxFiles).forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            showToast(`El archivo "${overLimit[0].name}" supera el límite de 30 MB y fue descartado.`, 'warning');
+        } else if (input.files.length > maxFiles) {
             const dt = new DataTransfer();
             Array.from(input.files).slice(0, maxFiles).forEach(f => dt.items.add(f));
             input.files = dt.files;
@@ -2270,7 +2286,7 @@
         input._uploadPromise = null;
 
         if (input.files.length === 0) {
-            if (helpEl) helpEl.innerHTML = `Máximo ${maxFiles} archivos (PDF, imágenes, etc.).`;
+            if (helpEl) helpEl.innerHTML = `Máximo ${maxFiles} archivos de hasta 30 MB c/u (PDF, imágenes, etc.).`;
             return;
         }
 
@@ -2278,10 +2294,9 @@
         const totalMb = (totalBytes / (1024 * 1024)).toFixed(1);
         const count = input.files.length;
 
-        const largePdf = Array.from(input.files).find(f => f.size > 15 * 1024 * 1024 && (!f.type || !f.type.startsWith('image/')));
         let warning = '';
-        if (largePdf) {
-            warning = `<span style="color:#d92d20; display:block; margin-top:2px;">⚠️ "${escapeHTML(largePdf.name)}" pesa más de 15 MB. Podría demorar en guardarse.</span>`;
+        if (totalBytes > 25 * 1024 * 1024) {
+            warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se enviará en paquetes individuales optimizados.</span>`;
         }
 
         if (helpEl) {
