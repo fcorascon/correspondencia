@@ -1459,6 +1459,59 @@
         });
     }
 
+    async function uploadLargeFileResumable(file, onProgress = null) {
+        if (onProgress) onProgress(`Iniciando sesión de Drive para "${file.name}"...`);
+
+        const sessionRes = await apiRequest('create_upload_session', {
+            filename: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            section: currentSection
+        }, 'POST');
+
+        if (!sessionRes || !sessionRes.success || !sessionRes.sessionUrl) {
+            const errDetail = sessionRes?.error || 'No se recibió la URL de sesión de Google Drive';
+            throw new Error(`No se pudo iniciar la carga directa de "${file.name}": ${errDetail}. Recuerda actualizar el despliegue en Google Apps Script.`);
+        }
+
+        const sessionUrl = sessionRes.sessionUrl;
+
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', sessionUrl, true);
+            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+            if (xhr.upload && onProgress) {
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable && e.total > 0) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        const loadedMb = (e.loaded / (1024 * 1024)).toFixed(1);
+                        const totalMb = (e.total / (1024 * 1024)).toFixed(1);
+                        onProgress(`Subiendo "${file.name}": ${percent}% (${loadedMb} de ${totalMb} MB)`);
+                    }
+                };
+            }
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data && data.id) {
+                            resolve(`https://drive.google.com/file/d/${data.id}/preview`);
+                            return;
+                        }
+                    } catch (_) {}
+                    resolve(sessionRes.sessionUrl);
+                } else {
+                    reject(new Error(`Error al transmitir "${file.name}" a Google Drive (HTTP ${xhr.status}): ${xhr.statusText || xhr.responseText}`));
+                }
+            };
+
+            xhr.onerror = () => reject(new Error(`Error de conexión al subir "${file.name}" directamente a Google Drive.`));
+            xhr.ontimeout = () => reject(new Error(`Tiempo de espera agotado al subir "${file.name}".`));
+            xhr.send(file);
+        });
+    }
+
     async function uploadFiles(files, limit = 10, onProgress = null) {
         if (!files || files.length === 0) return null;
         if (!GOOGLE_SCRIPT_URL) {
@@ -1469,61 +1522,91 @@
         const fileList = Array.from(files).slice(0, limit);
         const total = fileList.length;
 
-        // Paso 1: Optimización y compresión simultánea en hilos paralelos (Promise.all)
-        if (onProgress) onProgress(total > 1 ? `Optimizando ${total} archivos...` : 'Optimizando archivo...');
-        const preparedFiles = await Promise.all(fileList.map(async (file) => {
-            const optimized = await compressImageIfNeeded(file);
-            const base64 = await fileToBase64(optimized);
-            return {
-                filename: optimized.name || file.name,
-                mimeType: optimized.type || file.type || 'application/octet-stream',
-                base64: base64
-            };
+        // Paso 1: Optimización de imágenes y clasificación por tamaño
+        if (onProgress) onProgress(total > 1 ? `Preparando ${total} archivos...` : 'Preparando archivo...');
+        const optimizedFiles = await Promise.all(fileList.map(async (file) => {
+            return await compressImageIfNeeded(file);
         }));
 
-        // Paso 2: Evaluar si el tamaño combinado permite lote o requiere subida individual
-        // Un archivo de hasta 30 MB en Base64 pesa ~40 MB. El límite HTTP de Google Apps Script es 50 MB.
-        // Si el lote combinado pesa menos de 25 MB se sube en un solo viaje; si es mayor, se envían 1 por 1
-        // para garantizar que archivos grandes de hasta 30 MB nunca excedan el límite de Google.
-        const totalBase64Length = preparedFiles.reduce((acc, f) => acc + (f.base64 ? f.base64.length : 0), 0);
-        const canUseBatch = totalBase64Length < 25 * 1024 * 1024;
+        // Clasificar: archivos mayores a 20 MB (hasta 55 MB) se suben directamente vía Resumable Upload
+        // para garantizar que nunca se supere el límite de 50 MB de cuerpo POST de Google Apps Script.
+        const LARGE_FILE_THRESHOLD = 20 * 1024 * 1024;
+        const largeFiles = [];
+        const standardFiles = [];
 
-        if (canUseBatch) {
-            if (onProgress) onProgress(total > 1 ? `Subiendo ${total} archivos a Drive...` : 'Subiendo archivo a Drive...');
-            try {
-                const batchRes = await apiRequest('upload_batch', {
-                    files: preparedFiles,
-                    section: currentSection
-                }, 'POST');
+        for (const file of optimizedFiles) {
+            if (file.size > LARGE_FILE_THRESHOLD) {
+                largeFiles.push(file);
+            } else {
+                standardFiles.push(file);
+            }
+        }
 
-                if (batchRes && batchRes.success && Array.isArray(batchRes.urls)) {
-                    return JSON.stringify(batchRes.urls);
+        const allUrls = [];
+
+        // Paso 2: Subida de archivos grandes (> 20 MB) directamente a Google Drive (sin pasar por Base64 ni Apps Script)
+        for (let i = 0; i < largeFiles.length; i++) {
+            const file = largeFiles[i];
+            const url = await uploadLargeFileResumable(file, (msg) => {
+                if (onProgress) onProgress(largeFiles.length > 1 ? `[${i + 1}/${largeFiles.length}] ${msg}` : msg);
+            });
+            allUrls.push(url);
+        }
+
+        // Paso 3: Subida de archivos estándar (<= 20 MB)
+        if (standardFiles.length > 0) {
+            if (onProgress) onProgress(standardFiles.length > 1 ? `Codificando ${standardFiles.length} archivos...` : 'Codificando archivo...');
+            const preparedFiles = await Promise.all(standardFiles.map(async (file) => {
+                const base64 = await fileToBase64(file);
+                return {
+                    filename: file.name,
+                    mimeType: file.type || 'application/octet-stream',
+                    base64: base64
+                };
+            }));
+
+            const totalBase64Length = preparedFiles.reduce((acc, f) => acc + (f.base64 ? f.base64.length : 0), 0);
+            const canUseBatch = totalBase64Length < 25 * 1024 * 1024;
+
+            let batchSuccess = false;
+            if (canUseBatch) {
+                if (onProgress) onProgress(standardFiles.length > 1 ? `Subiendo lote de ${standardFiles.length} archivos a Drive...` : 'Subiendo a Drive...');
+                try {
+                    const batchRes = await apiRequest('upload_batch', {
+                        files: preparedFiles,
+                        section: currentSection
+                    }, 'POST');
+
+                    if (batchRes && batchRes.success && Array.isArray(batchRes.urls)) {
+                        allUrls.push(...batchRes.urls);
+                        batchSuccess = true;
+                    }
+                } catch (batchErr) {
+                    console.warn('Subida por lote no disponible o excedió límite, usando subida individual:', batchErr);
                 }
-            } catch (batchErr) {
-                console.warn('Subida por lote no disponible o excedió límite, usando subida individual:', batchErr);
+            }
+
+            if (!batchSuccess) {
+                for (let i = 0; i < preparedFiles.length; i++) {
+                    const item = preparedFiles[i];
+                    if (onProgress) onProgress(`Subiendo archivo ${i + 1} de ${preparedFiles.length}...`);
+                    const res = await apiRequest('upload', {
+                        filename: item.filename,
+                        mimeType: item.mimeType,
+                        base64: item.base64,
+                        section: currentSection
+                    }, 'POST');
+
+                    if (!res || !res.success) {
+                        throw new Error(res?.error || `Error al guardar archivo ${item.filename} en Google Drive`);
+                    }
+
+                    allUrls.push(res.publicUrl || res.viewUrl);
+                }
             }
         }
 
-        // Paso 3: Fallback a subida individual (para compatibilidad con scripts existentes)
-        const urls = [];
-        for (let i = 0; i < preparedFiles.length; i++) {
-            const item = preparedFiles[i];
-            if (onProgress) onProgress(`Subiendo archivo ${i + 1} de ${total}...`);
-            const res = await apiRequest('upload', {
-                filename: item.filename,
-                mimeType: item.mimeType,
-                base64: item.base64,
-                section: currentSection
-            }, 'POST');
-
-            if (!res || !res.success) {
-                throw new Error(res?.error || `Error al guardar archivo ${item.filename} en Google Drive`);
-            }
-
-            urls.push(res.publicUrl || res.viewUrl);
-        }
-
-        return JSON.stringify(urls);
+        return JSON.stringify(allUrls);
     }
 
     function renderGrid() {
@@ -2185,7 +2268,7 @@
                     <label>${escapeHTML(field.name)} ${reqStar}</label>
                     ${existingFilesHtml}
                     <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="window.handleFileInputChange(this, ${maxFiles})">
-                    <div class="file-input-help" style="margin-top: 4px; font-size: 0.75rem; color: var(--text-muted);">Máximo ${maxFiles} archivos de hasta 30 MB c/u (PDF, imágenes, etc.).</div>
+                    <div class="file-input-help" style="margin-top: 4px; font-size: 0.75rem; color: var(--text-muted);">Máximo ${maxFiles} archivos de hasta 55 MB c/u (PDF, imágenes, etc.).</div>
                 `;
             } else if (field.type === 'select') {
                 const valTarget = String(rawValue || '').toUpperCase().trim();
@@ -2265,13 +2348,13 @@
     window.handleFileInputChange = function (input, maxFiles) {
         if (!input || !input.files) return;
 
-        const MAX_FILE_SIZE = 30 * 1024 * 1024; // Límite de 30 MB por archivo
+        const MAX_FILE_SIZE = 55 * 1024 * 1024; // Límite ampliado a 55 MB por archivo
         const overLimit = Array.from(input.files).filter(f => f.size > MAX_FILE_SIZE);
         if (overLimit.length > 0) {
             const dt = new DataTransfer();
             Array.from(input.files).filter(f => f.size <= MAX_FILE_SIZE).slice(0, maxFiles).forEach(f => dt.items.add(f));
             input.files = dt.files;
-            showToast(`El archivo "${overLimit[0].name}" supera el límite de 30 MB y fue descartado.`, 'warning');
+            showToast(`El archivo "${overLimit[0].name}" supera el límite de 55 MB y fue descartado.`, 'warning');
         } else if (input.files.length > maxFiles) {
             const dt = new DataTransfer();
             Array.from(input.files).slice(0, maxFiles).forEach(f => dt.items.add(f));
@@ -2286,7 +2369,7 @@
         input._uploadPromise = null;
 
         if (input.files.length === 0) {
-            if (helpEl) helpEl.innerHTML = `Máximo ${maxFiles} archivos de hasta 30 MB c/u (PDF, imágenes, etc.).`;
+            if (helpEl) helpEl.innerHTML = `Máximo ${maxFiles} archivos de hasta 55 MB c/u (PDF, imágenes, etc.).`;
             return;
         }
 
@@ -2295,8 +2378,8 @@
         const count = input.files.length;
 
         let warning = '';
-        if (totalBytes > 25 * 1024 * 1024) {
-            warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se enviará en paquetes individuales optimizados.</span>`;
+        if (totalBytes > 20 * 1024 * 1024) {
+            warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se utilizará transmisión directa resumable a Google Drive.</span>`;
         }
 
         if (helpEl) {
@@ -2309,11 +2392,21 @@
             `;
         }
 
-        // Iniciar pre-subida optimista en segundo plano de inmediato
+        // Iniciar pre-subida optimista en segundo plano con seguimiento en vivo
         if (GOOGLE_SCRIPT_URL) {
             const filesToUpload = Array.from(input.files).slice(0, maxFiles);
             const currentFilesRef = input.files;
-            input._uploadPromise = uploadFiles(filesToUpload, maxFiles)
+            input._uploadPromise = uploadFiles(filesToUpload, maxFiles, (msg) => {
+                if (helpEl && input.files === currentFilesRef) {
+                    helpEl.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:6px; color:var(--primary); font-weight:600;">
+                            <span style="display:inline-block;width:0.75rem;height:0.75rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .75s linear infinite;"></span>
+                            <span>${escapeHTML(msg)}</span>
+                        </div>
+                        ${warning}
+                    `;
+                }
+            })
                 .then(uploadedJson => {
                     if (input.files === currentFilesRef && input.files.length > 0) {
                         input._uploadedUrls = uploadedJson;
@@ -2336,7 +2429,7 @@
                     if (helpEl && input.files === currentFilesRef) {
                         helpEl.innerHTML = `
                             <span style="color:var(--text-muted);">
-                                ${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${totalMb} MB). Se subirá al guardar.
+                                ${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${totalMb} MB). Se completará al hacer clic en Guardar.
                             </span>
                             ${warning}
                         `;

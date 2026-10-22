@@ -152,6 +152,10 @@ function doPost(e) {
             return handleDelete(payload.table, payload.id);
         }
 
+        if (action === 'create_upload_session') {
+            return handleCreateUploadSession(payload.filename, payload.mimeType, payload.section);
+        }
+
         if (action === 'upload_batch' || (action === 'upload' && Array.isArray(payload.files))) {
             return handleUploadBatch(payload.files, payload.section);
         }
@@ -532,6 +536,55 @@ function handleUploadBatch(files, section) {
         });
     } catch (err) {
         return createJsonResponse({ success: false, error: 'Error en carga por lote a Google Drive: ' + err.toString() });
+    }
+}
+
+/**
+ * Crea una sesión de carga directa (Resumable Upload) hacia Google Drive.
+ * Permite al navegador transmitir archivos grandes (30 MB a 100 MB+) en formato binario directo,
+ * superando el límite de 50 MB de cuerpo POST de Google Apps Script y eliminando la inflación de Base64.
+ */
+function handleCreateUploadSession(filename, mimeType, section) {
+    try {
+        const targetFolder = getTargetFolder(section);
+        const token = ScriptApp.getOAuthToken();
+        const cleanFilename = (filename || 'archivo').replace(/[^a-zA-Z0-9._\-áéíóúÁÉÍÓÚñÑ ]/g, '_');
+        const uniqueName = `${new Date().getTime()}_${cleanFilename}`;
+
+        const metadata = {
+            name: uniqueName,
+            mimeType: mimeType || 'application/octet-stream',
+            parents: [targetFolder.getId()]
+        };
+
+        const response = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+            method: 'post',
+            contentType: 'application/json; charset=UTF-8',
+            headers: {
+                Authorization: 'Bearer ' + token
+            },
+            payload: JSON.stringify(metadata),
+            muteHttpExceptions: true
+        });
+
+        const code = response.getResponseCode();
+        if (code !== 200) {
+            return createJsonResponse({ success: false, error: 'Error al iniciar sesión de Drive: ' + response.getContentText() });
+        }
+
+        const headers = response.getAllHeaders();
+        const sessionUrl = headers['Location'] || headers['location'];
+        if (!sessionUrl) {
+            return createJsonResponse({ success: false, error: 'No se obtuvo la URL de sesión de Google Drive.' });
+        }
+
+        return createJsonResponse({
+            success: true,
+            sessionUrl: sessionUrl,
+            filename: uniqueName
+        });
+    } catch (err) {
+        return createJsonResponse({ success: false, error: 'Error en create_upload_session: ' + err.toString() });
     }
 }
 
