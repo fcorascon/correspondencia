@@ -179,6 +179,13 @@
         return true;
     }
 
+    function isIniciativaRechazada(item) {
+        if (!item) return false;
+        const dict = String(getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen') || '').toUpperCase().trim();
+        const op = String(getItemValue(item, 'opinion') || '').toUpperCase().trim();
+        return dict.includes('IMPROCEDENTE') || op.includes('IMPROCEDENTE') || dict.includes('RECHAZAD') || dict.includes('DESECHAD');
+    }
+
     function parseDate(str) {
         if (!str) return null;
         if (str instanceof Date) {
@@ -698,32 +705,32 @@
     const statFiltersConfig = {
         iniciativas: {
             comision: (item) => {
+                if (isIniciativaRechazada(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                const dec = getItemValue(item, 'decreto');
-                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
-                return hasValidComision(com) && !isDictPleno && !hasFieldInfo(dec);
+                return hasValidComision(com) && !hasFieldInfo(dict);
             },
             dictaminadas: (item) => {
+                if (isIniciativaRechazada(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                const dec = getItemValue(item, 'decreto');
-                return hasFieldInfo(dict) && hasFieldInfo(dec);
+                return hasFieldInfo(dict);
             },
             dictamen: (item) => {
+                if (isIniciativaRechazada(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                const dec = getItemValue(item, 'decreto');
-                return hasFieldInfo(dict) && hasFieldInfo(dec);
+                return hasFieldInfo(dict);
+            },
+            rechazadas: (item) => {
+                return isIniciativaRechazada(item);
             },
             decreto: (item) => {
-                const dec = getItemValue(item, 'decreto');
-                return hasFieldInfo(dec);
+                return isIniciativaRechazada(item);
             },
             oficialia: (item) => {
+                if (isIniciativaRechazada(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                const dec = getItemValue(item, 'decreto');
-                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
-                return !isDictPleno && !hasFieldInfo(dec) && !hasValidComision(com);
+                return !hasValidComision(com) && !hasFieldInfo(dict);
             }
         },
         recibida: {
@@ -804,7 +811,7 @@
             { id: 'total', label: 'Total Iniciativas', icon: 'bi-file-earmark-text', iconClass: 'stat-icon-blue' },
             { id: 'comision', label: 'En Comisión', icon: 'bi-hourglass-split', iconClass: 'stat-icon-purple' },
             { id: 'dictaminadas', label: 'Dictaminadas / Pleno', icon: 'bi-clipboard2-check', iconClass: 'stat-icon-indigo' },
-            { id: 'decreto', label: 'Con Decreto / Aprobadas', icon: 'bi-award', iconClass: 'stat-icon-green' }
+            { id: 'rechazadas', label: 'Rechazadas', icon: 'bi-x-circle', iconClass: 'stat-icon-red' }
         ],
         proposiciones: [
             { id: 'total', label: 'Total Proposiciones', icon: 'bi-pencil-square', iconClass: 'stat-icon-blue' },
@@ -887,18 +894,17 @@
             });
         } else if (currentSection === 'iniciativas') {
             data.forEach(item => {
+                const isRech = isIniciativaRechazada(item);
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                const dec = getItemValue(item, 'decreto');
-                const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
-                const hasDec = hasFieldInfo(dec);
 
-                // En Comision (con nombre de comisión válido asignado)
-                if (hasValidComision(com) && !isDictPleno && !hasDec) counts.card1++;
-                // Dictaminadas / Pleno (ambos campos con información real)
-                if (isDictPleno) counts.card2++;
-                // Con Decreto
-                if (hasDec) counts.card3++;
+                if (isRech) {
+                    counts.card3++;
+                } else if (hasFieldInfo(dict)) {
+                    counts.card2++;
+                } else if (hasValidComision(com)) {
+                    counts.card1++;
+                }
             });
         } else if (currentSection === 'proposiciones') {
             data.forEach(item => {
@@ -1014,12 +1020,10 @@
                 title: 'Presentadas / Oficialía',
                 icon: 'bi-file-earmark-plus',
                 filter: (item) => {
+                    if (isIniciativaRechazada(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                    const dec = getItemValue(item, 'decreto');
-                    const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
-                    const hasDec = hasFieldInfo(dec);
-                    return !isDictPleno && !hasDec && !hasValidComision(com);
+                    return !hasFieldInfo(dict) && !hasValidComision(com);
                 }
             },
             {
@@ -1027,12 +1031,10 @@
                 title: 'En Comisión / Turno Legis',
                 icon: 'bi-hourglass-split',
                 filter: (item) => {
+                    if (isIniciativaRechazada(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                    const dec = getItemValue(item, 'decreto');
-                    const isDictPleno = hasFieldInfo(dict) && hasFieldInfo(dec);
-                    const hasDec = hasFieldInfo(dec);
-                    return !isDictPleno && !hasDec && hasValidComision(com);
+                    return !hasFieldInfo(dict) && hasValidComision(com);
                 }
             },
             {
@@ -1040,18 +1042,17 @@
                 title: 'Dictaminadas / Pleno',
                 icon: 'bi-clipboard2-check',
                 filter: (item) => {
+                    if (isIniciativaRechazada(item)) return false;
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
-                    const dec = getItemValue(item, 'decreto');
-                    return hasFieldInfo(dict) && hasFieldInfo(dec);
+                    return hasFieldInfo(dict);
                 }
             },
             {
-                id: 'decreto',
-                title: 'Con Decreto / Aprobadas',
-                icon: 'bi-award',
+                id: 'rechazadas',
+                title: 'Rechazadas',
+                icon: 'bi-x-circle-fill',
                 filter: (item) => {
-                    const dec = getItemValue(item, 'decreto');
-                    return hasFieldInfo(dec);
+                    return isIniciativaRechazada(item);
                 }
             }
         ],
@@ -1209,7 +1210,11 @@
             const com = getItemValue(item, 'comision');
             if (com) metaBadges.push(`<span class="badge badge-info">${escapeHTML(com)}</span>`);
             const dict = getItemValue(item, 'dictaminada_favor_contra');
-            if (dict) metaBadges.push(`<span class="badge badge-success">${escapeHTML(dict)}</span>`);
+            if (dict) {
+                const dictUp = String(dict).toUpperCase();
+                const isNeg = dictUp.includes('IMPROCEDENTE') || dictUp.includes('CONTRA') || dictUp.includes('RECHAZAD') || dictUp.includes('DESECHAD');
+                metaBadges.push(`<span class="badge ${isNeg ? 'badge-danger' : 'badge-success'}">${escapeHTML(dict)}</span>`);
+            }
             const op = getItemValue(item, 'opinion');
             if (op) {
                 let badgeClass = 'badge-info';
@@ -1382,30 +1387,136 @@
         });
     }
 
-    async function uploadFiles(files, limit = 10) {
+    /**
+     * Comprime imágenes en el navegador antes de enviarlas al servidor.
+     * Reduce drásticamente el tamaño (ej: de 8MB a ~300KB) acelerando la subida hasta 10 veces.
+     * Documentos PDF y archivos ya ligeros no se modifican.
+     */
+    function compressImageIfNeeded(file, maxWidth = 1600, maxHeight = 1600, quality = 0.8) {
+        if (!file || !file.type || !file.type.startsWith('image/')) {
+            return Promise.resolve(file);
+        }
+        // Si ya pesa menos de 350 KB, no es necesario comprimir
+        if (file.size < 350 * 1024) {
+            return Promise.resolve(file);
+        }
+
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width <= maxWidth && height <= maxHeight && file.size < 600 * 1024) {
+                        return resolve(file);
+                    }
+
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = Math.round((width * maxHeight) / height);
+                            height = maxHeight;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+
+                    // Fondo blanco para evitar transparencias oscuras al exportar a JPEG
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, width, height);
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        if (!blob || blob.size >= file.size) {
+                            return resolve(file);
+                        }
+                        const cleanBaseName = file.name.replace(/\.[^.]+$/, '');
+                        const newName = cleanBaseName + '.jpg';
+                        try {
+                            const optimizedFile = new File([blob], newName, {
+                                type: 'image/jpeg',
+                                lastModified: Date.now()
+                            });
+                            resolve(optimizedFile);
+                        } catch (_) {
+                            blob.name = newName;
+                            resolve(blob);
+                        }
+                    }, 'image/jpeg', quality);
+                };
+                img.onerror = () => resolve(file);
+                img.src = e.target.result;
+            };
+            reader.onerror = () => resolve(file);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function uploadFiles(files, limit = 10, onProgress = null) {
         if (!files || files.length === 0) return null;
         if (!GOOGLE_SCRIPT_URL) {
             showToast('Configura la URL de Google Apps Script para guardar archivos.', 'warning');
             return null;
         }
 
-        const uploadPromises = Array.from(files).slice(0, limit).map(async (file) => {
-            const base64 = await fileToBase64(file);
+        const fileList = Array.from(files).slice(0, limit);
+        const total = fileList.length;
+
+        // Paso 1: Optimización y compresión rápida en cliente
+        if (onProgress) onProgress(total > 1 ? `Optimizando ${total} archivos...` : 'Optimizando archivo...');
+        const preparedFiles = [];
+        for (let i = 0; i < fileList.length; i++) {
+            const file = fileList[i];
+            const optimized = await compressImageIfNeeded(file);
+            const base64 = await fileToBase64(optimized);
+            preparedFiles.push({
+                filename: optimized.name || file.name,
+                mimeType: optimized.type || file.type || 'application/octet-stream',
+                base64: base64
+            });
+        }
+
+        // Paso 2: Intentar subida en lote (1 sola petición HTTP para todos los archivos)
+        if (onProgress) onProgress(total > 1 ? `Subiendo ${total} archivos a Drive...` : 'Subiendo archivo a Drive...');
+        try {
+            const batchRes = await apiRequest('upload_batch', {
+                files: preparedFiles,
+                section: currentSection
+            }, 'POST');
+
+            if (batchRes && batchRes.success && Array.isArray(batchRes.urls)) {
+                return JSON.stringify(batchRes.urls);
+            }
+        } catch (batchErr) {
+            console.warn('Subida por lote no disponible o rechazada, usando subida directa:', batchErr);
+        }
+
+        // Paso 3: Fallback a subida individual (para compatibilidad con scripts existentes)
+        const urls = [];
+        for (let i = 0; i < preparedFiles.length; i++) {
+            const item = preparedFiles[i];
+            if (onProgress) onProgress(`Subiendo archivo ${i + 1} de ${total}...`);
             const res = await apiRequest('upload', {
-                filename: file.name,
-                mimeType: file.type || 'application/octet-stream',
-                base64: base64,
+                filename: item.filename,
+                mimeType: item.mimeType,
+                base64: item.base64,
                 section: currentSection
             }, 'POST');
 
             if (!res || !res.success) {
-                throw new Error(res?.error || 'Error al guardar archivo en Google Drive');
+                throw new Error(res?.error || `Error al guardar archivo ${item.filename} en Google Drive`);
             }
 
-            return res.publicUrl || res.viewUrl;
-        });
+            urls.push(res.publicUrl || res.viewUrl);
+        }
 
-        const urls = await Promise.all(uploadPromises);
         return JSON.stringify(urls);
     }
 
@@ -2067,8 +2178,8 @@
                 div.innerHTML = `
                     <label>${escapeHTML(field.name)} ${reqStar}</label>
                     ${existingFilesHtml}
-                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="if(this.files.length>${maxFiles}){const dt=new DataTransfer();Array.from(this.files).slice(0,${maxFiles}).forEach(f=>dt.items.add(f));this.files=dt.files;showToast('Solo se permiten hasta ${maxFiles} archivos. Se cargarán los primeros ${maxFiles}.', 'warning');}">
-                    <small style="color:var(--text-muted); font-size: 0.75rem;">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</small>
+                    <input type="file" name="${field.id}" accept="image/*,.pdf" multiple onchange="window.handleFileInputChange(this, ${maxFiles})">
+                    <div class="file-input-help" style="margin-top: 4px; font-size: 0.75rem; color: var(--text-muted);">Máximo ${maxFiles} archivos (PDF, imágenes, etc.).</div>
                 `;
             } else if (field.type === 'select') {
                 const valTarget = String(rawValue || '').toUpperCase().trim();
@@ -2143,6 +2254,44 @@
         const overlay = document.getElementById('modalOverlay');
         if (overlay) overlay.style.display = 'none';
         currentEditId = null;
+    };
+
+    window.handleFileInputChange = function (input, maxFiles) {
+        if (!input || !input.files) return;
+        if (input.files.length > maxFiles) {
+            const dt = new DataTransfer();
+            Array.from(input.files).slice(0, maxFiles).forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            showToast(`Solo se permiten hasta ${maxFiles} archivos. Se tomarán los primeros ${maxFiles}.`, 'warning');
+        }
+
+        const helpEl = input.parentElement ? input.parentElement.querySelector('.file-input-help') : null;
+        if (!helpEl) return;
+
+        if (input.files.length === 0) {
+            helpEl.innerHTML = `Máximo ${maxFiles} archivos (PDF, imágenes, etc.).`;
+            return;
+        }
+
+        const totalBytes = Array.from(input.files).reduce((acc, f) => acc + (f.size || 0), 0);
+        const totalMb = (totalBytes / (1024 * 1024)).toFixed(1);
+        const count = input.files.length;
+
+        const largePdf = Array.from(input.files).find(f => f.size > 15 * 1024 * 1024 && (!f.type || !f.type.startsWith('image/')));
+        let warning = '';
+        if (largePdf) {
+            warning = `<span style="color:#d92d20; display:block; margin-top:2px;">⚠️ "${escapeHTML(largePdf.name)}" pesa más de 15 MB. Podría demorar en guardarse.</span>`;
+        }
+
+        helpEl.innerHTML = `
+            <span style="color:var(--primary); font-weight:600;">
+                <i class="bi bi-check2-circle"></i> ${count} archivo${count > 1 ? 's' : ''} listo${count > 1 ? 's' : ''} (${totalMb} MB total)
+            </span>
+            <span style="display:block; color:var(--text-muted); font-size:0.72rem; margin-top:1px;">
+                Las fotos se optimizan automáticamente al guardar para carga rápida.
+            </span>
+            ${warning}
+        `;
     };
 
     // Remove an existing file row from the edit modal with a smooth animation
@@ -2981,7 +3130,10 @@
 
                 const btn = e.target.querySelector('button[type="submit"]');
                 const originalText = btn.innerText;
-                btn.innerText = "Guardando...";
+                const setProgress = (text) => {
+                    if (btn) btn.innerHTML = `<span style="display:inline-block;width:0.875rem;height:0.875rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .75s linear infinite;vertical-align:-2px;margin-right:6px;"></span> ${escapeHTML(text)}`;
+                };
+                setProgress("Procesando...");
                 btn.disabled = true;
 
                 try {
@@ -3011,7 +3163,7 @@
 
                             if (files && files.length > 0) {
                                 // Upload new files then merge with kept ones
-                                const uploaded = await uploadFiles(files, maxFiles);
+                                const uploaded = await uploadFiles(files, maxFiles, (msg) => setProgress(msg));
                                 if (uploaded) {
                                     const newUrls = JSON.parse(uploaded);
                                     const combined = keptUrls.concat(newUrls).slice(0, maxFiles);
@@ -3056,6 +3208,7 @@
                         return;
                     }
 
+                    setProgress("Guardando registro...");
                     const tableName = getTableName(currentSection);
                     let result;
                     if (currentEditId) {
@@ -3074,7 +3227,7 @@
                 } catch (err) {
                     showToast('Error en la operación: ' + err.message, 'error');
                 } finally {
-                    btn.innerText = originalText;
+                    btn.innerHTML = originalText;
                     btn.disabled = false;
                 }
             };

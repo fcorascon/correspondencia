@@ -152,6 +152,10 @@ function doPost(e) {
             return handleDelete(payload.table, payload.id);
         }
 
+        if (action === 'upload_batch' || (action === 'upload' && Array.isArray(payload.files))) {
+            return handleUploadBatch(payload.files, payload.section);
+        }
+
         if (action === 'upload') {
             return handleUpload(payload.filename, payload.mimeType, payload.base64, payload.section);
         }
@@ -418,35 +422,123 @@ function handleDelete(tableName, id) {
 }
 
 /**
- * Carga de archivos a Google Drive
+ * Cache en memoria por ciclo de ejecución
  */
-function handleUpload(filename, mimeType, base64Data, section) {
-    try {
-        if (!base64Data) return createJsonResponse({ success: false, error: 'No se recibieron datos del archivo.' });
+const FOLDER_CACHE = {};
 
-        // Obtener o crear la carpeta principal
-        let mainFolder;
+/**
+ * Obtiene la carpeta de destino en Google Drive utilizando caché en ScriptProperties
+ * para evitar búsquedas repetitivas y lentas en todo Google Drive.
+ */
+function getTargetFolder(section) {
+    const key = section ? String(section).trim() : 'root';
+    if (FOLDER_CACHE[key]) return FOLDER_CACHE[key];
+
+    const props = PropertiesService.getScriptProperties();
+    const propKey = 'FOLDER_ID_' + key;
+    const cachedId = props.getProperty(propKey);
+
+    if (cachedId) {
+        try {
+            const folder = DriveApp.getFolderById(cachedId);
+            if (folder) {
+                FOLDER_CACHE[key] = folder;
+                return folder;
+            }
+        } catch (e) {
+            // El ID guardado ya no es válido o fue borrado, se procede a re-buscar
+        }
+    }
+
+    // Carpeta principal
+    let mainFolder;
+    const mainId = props.getProperty('FOLDER_ID_root');
+    if (mainId) {
+        try {
+            mainFolder = DriveApp.getFolderById(mainId);
+        } catch (e) {}
+    }
+
+    if (!mainFolder) {
         const folders = DriveApp.getFoldersByName(FOLDER_NAME);
         if (folders.hasNext()) {
             mainFolder = folders.next();
         } else {
             mainFolder = DriveApp.createFolder(FOLDER_NAME);
         }
+        props.setProperty('FOLDER_ID_root', mainFolder.getId());
+    }
 
-        // Subcarpeta por sección si se especifica
-        let targetFolder = mainFolder;
-        if (section) {
-            const subFolders = mainFolder.getFoldersByName(section);
-            if (subFolders.hasNext()) {
-                targetFolder = subFolders.next();
-            } else {
-                targetFolder = mainFolder.createFolder(section);
-            }
+    // Subcarpeta por sección si aplica
+    let targetFolder = mainFolder;
+    if (section) {
+        const subFolders = mainFolder.getFoldersByName(section);
+        if (subFolders.hasNext()) {
+            targetFolder = subFolders.next();
+        } else {
+            targetFolder = mainFolder.createFolder(section);
         }
+    }
+
+    props.setProperty(propKey, targetFolder.getId());
+    FOLDER_CACHE[key] = targetFolder;
+    return targetFolder;
+}
+
+/**
+ * Carga de múltiples archivos a Google Drive en una sola llamada (Batch Upload)
+ * Optimiza drásticamente el tiempo al resolver la carpeta una sola vez y evitar
+ * múltiples arranques de Apps Script.
+ */
+function handleUploadBatch(files, section) {
+    try {
+        if (!files || !Array.isArray(files) || files.length === 0) {
+            return createJsonResponse({ success: false, error: 'No se recibieron archivos para subir.' });
+        }
+
+        const targetFolder = getTargetFolder(section);
+        const urls = [];
+        const timestamp = new Date().getTime();
+
+        for (let i = 0; i < files.length; i++) {
+            const item = files[i];
+            if (!item || !item.base64) continue;
+
+            const decodedBytes = Utilities.base64Decode(item.base64);
+            const cleanFilename = (item.filename || 'archivo').replace(/[^a-zA-Z0-9._\-áéíóúÁÉÍÓÚñÑ ]/g, '_');
+            const uniqueName = `${timestamp}_${i + 1}_${cleanFilename}`;
+            const blob = Utilities.newBlob(decodedBytes, item.mimeType || 'application/octet-stream', uniqueName);
+
+            const file = targetFolder.createFile(blob);
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+            const fileId = file.getId();
+            const viewUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+            urls.push(viewUrl);
+        }
+
+        return createJsonResponse({
+            success: true,
+            urls: urls
+        });
+    } catch (err) {
+        return createJsonResponse({ success: false, error: 'Error en carga por lote a Google Drive: ' + err.toString() });
+    }
+}
+
+/**
+ * Carga individual de archivos a Google Drive
+ */
+function handleUpload(filename, mimeType, base64Data, section) {
+    try {
+        if (!base64Data) return createJsonResponse({ success: false, error: 'No se recibieron datos del archivo.' });
+
+        const targetFolder = getTargetFolder(section);
 
         // Decodificar Base64
         const decodedBytes = Utilities.base64Decode(base64Data);
-        const uniqueName = `${new Date().getTime()}_${filename || 'archivo'}`;
+        const cleanFilename = (filename || 'archivo').replace(/[^a-zA-Z0-9._\-áéíóúÁÉÍÓÚñÑ ]/g, '_');
+        const uniqueName = `${new Date().getTime()}_${cleanFilename}`;
         const blob = Utilities.newBlob(decodedBytes, mimeType || 'application/octet-stream', uniqueName);
 
         const file = targetFolder.createFile(blob);

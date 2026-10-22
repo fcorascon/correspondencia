@@ -2047,6 +2047,10 @@ input[type="file"]::file-selector-button {
     0%   { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
 .skeleton-row td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); }
 .skeleton-cell { height: 14px; border-radius: 6px; display: block; }
 
