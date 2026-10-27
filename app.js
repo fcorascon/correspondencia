@@ -1,7 +1,7 @@
 (function () {
-    const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxdj2hCcliJt_YplYhOuEcENinLkunUXflVHGsLa14OsILur_4GTteApNnd7HP4O2c1/exec';
+    const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxHHS0Y9ZwYCsysEzDfxWCT_5MbR0Onuflu2hCLihUA_SuiBlkitzNGkY-UZFFPCsvR/exec';
     let storedUrl = localStorage.getItem('googleScriptUrl');
-    if (!storedUrl || !storedUrl.includes('/exec')) {
+    if (!storedUrl || !storedUrl.includes('/exec') || storedUrl.includes('AKfycbxdj2hCcliJt_YplYhOuEcENinLkunUXflVHGsLa14OsILur_4GTteApNnd7HP4O2c1')) {
         storedUrl = DEFAULT_SCRIPT_URL;
         try { localStorage.setItem('googleScriptUrl', DEFAULT_SCRIPT_URL); } catch (_) {}
     }
