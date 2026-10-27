@@ -1486,6 +1486,9 @@
 
         if (!sessionRes || !sessionRes.success || !sessionRes.sessionUrl) {
             const errDetail = sessionRes?.error || 'No se recibió la URL de sesión de Google Drive';
+            if (errDetail.includes('UrlFetchApp') || errDetail.includes('script.external_request')) {
+                throw new Error(`Para subir archivos mayores a 36 MB, autoriza el permiso en Google Apps Script: abre el editor de Apps Script, selecciona la función "setupDatabase" y haz clic en "Ejecutar" una vez para aceptar los permisos requeridos.`);
+            }
             throw new Error(`No se pudo iniciar la carga directa de "${file.name}": ${errDetail}. Recuerda actualizar el despliegue en Google Apps Script.`);
         }
 
@@ -1553,9 +1556,9 @@
             return await compressImageIfNeeded(file);
         }));
 
-        // Clasificar: archivos mayores a 30 MB (hasta 55 MB) se suben preferentemente vía Resumable Upload
-        // Archivos hasta 30 MB caben directamente en el cuerpo POST (< 50 MB) de Google Apps Script.
-        const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
+        // Clasificar: archivos mayores a 36 MB (hasta 55 MB) se suben preferentemente vía Resumable Upload
+        // Archivos hasta 36 MB caben directamente en el cuerpo POST (< 50 MB) de Google Apps Script sin requerir UrlFetchApp.
+        const LARGE_FILE_THRESHOLD = 36 * 1024 * 1024;
         const largeFiles = [];
         const standardFiles = [];
 
@@ -2455,7 +2458,7 @@
         const count = input.files.length;
 
         let warning = '';
-        if (totalBytes > 30 * 1024 * 1024) {
+        if (totalBytes > 36 * 1024 * 1024) {
             warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se utilizará transmisión directa a Google Drive.</span>`;
         }
 
