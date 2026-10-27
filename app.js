@@ -54,9 +54,9 @@
             { id: 'comision', name: 'COMISIÓN', type: 'text' },
             { id: 'fecha_turno_legis', name: 'TURNO LEGIS', type: 'date' },
             { id: 'fecha_pleno', name: 'PLENO', type: 'date' },
-            { id: 'dictaminada_favor_contra', name: 'DICTAMEN', type: 'text' },
+            { id: 'dictaminada_favor_contra', name: 'DICTAMEN', type: 'number' },
             { id: 'opinion', name: 'OPINIÓN', type: 'select', options: ['PROCEDENTE', 'IMPROCEDENTE', 'EN TRÁMITE'] },
-            { id: 'decreto', name: 'DECRETO', type: 'text' },
+            { id: 'decreto', name: 'DECRETO', type: 'number' },
             { id: 'objeto', name: 'OBJETO', type: 'text', full: true },
             { id: 'pdf', name: 'PDF', type: 'file', maxFiles: 10 },
             { id: 'opinion_consultoria', name: 'OPINIÓN CONSULTORÍA', type: 'file', maxFiles: 5 },
@@ -179,12 +179,17 @@
         return true;
     }
 
-    function isIniciativaRechazada(item) {
+    function isIniciativaImprocedente(item) {
         if (!item) return false;
-        const dict = String(getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen') || '').toUpperCase().trim();
         const op = String(getItemValue(item, 'opinion') || '').toUpperCase().trim();
-        return dict.includes('IMPROCEDENTE') || op.includes('IMPROCEDENTE') || dict.includes('RECHAZAD') || dict.includes('DESECHAD');
+        if (op) {
+            return op.includes('IMPROCEDENTE');
+        }
+        // Compatibilidad con registros históricos cuyo campo dictamen guardaba "IMPROCEDENTE"
+        const dict = String(getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen') || '').toUpperCase().trim();
+        return dict.includes('IMPROCEDENTE') || dict.includes('RECHAZAD') || dict.includes('DESECHAD');
     }
+    const isIniciativaRechazada = isIniciativaImprocedente;
 
     function parseDate(str) {
         if (!str) return null;
@@ -705,29 +710,32 @@
     const statFiltersConfig = {
         iniciativas: {
             comision: (item) => {
-                if (isIniciativaRechazada(item)) return false;
+                if (isIniciativaImprocedente(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasValidComision(com) && !hasFieldInfo(dict);
             },
             dictaminadas: (item) => {
-                if (isIniciativaRechazada(item)) return false;
+                if (isIniciativaImprocedente(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasFieldInfo(dict);
             },
             dictamen: (item) => {
-                if (isIniciativaRechazada(item)) return false;
+                if (isIniciativaImprocedente(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasFieldInfo(dict);
             },
+            improcedentes: (item) => {
+                return isIniciativaImprocedente(item);
+            },
             rechazadas: (item) => {
-                return isIniciativaRechazada(item);
+                return isIniciativaImprocedente(item);
             },
             decreto: (item) => {
-                return isIniciativaRechazada(item);
+                return isIniciativaImprocedente(item);
             },
             oficialia: (item) => {
-                if (isIniciativaRechazada(item)) return false;
+                if (isIniciativaImprocedente(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return !hasValidComision(com) && !hasFieldInfo(dict);
@@ -811,7 +819,7 @@
             { id: 'total', label: 'Total Iniciativas', icon: 'bi-file-earmark-text', iconClass: 'stat-icon-blue' },
             { id: 'comision', label: 'En Comisión', icon: 'bi-hourglass-split', iconClass: 'stat-icon-purple' },
             { id: 'dictaminadas', label: 'Dictaminadas / Pleno', icon: 'bi-clipboard2-check', iconClass: 'stat-icon-indigo' },
-            { id: 'rechazadas', label: 'Rechazadas', icon: 'bi-x-circle', iconClass: 'stat-icon-red' }
+            { id: 'improcedentes', label: 'Improcedentes', icon: 'bi-x-circle', iconClass: 'stat-icon-red' }
         ],
         proposiciones: [
             { id: 'total', label: 'Total Proposiciones', icon: 'bi-pencil-square', iconClass: 'stat-icon-blue' },
@@ -894,11 +902,11 @@
             });
         } else if (currentSection === 'iniciativas') {
             data.forEach(item => {
-                const isRech = isIniciativaRechazada(item);
+                const isImproc = isIniciativaImprocedente(item);
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
 
-                if (isRech) {
+                if (isImproc) {
                     counts.card3++;
                 } else if (hasFieldInfo(dict)) {
                     counts.card2++;
@@ -1020,7 +1028,7 @@
                 title: 'Presentadas / Oficialía',
                 icon: 'bi-file-earmark-plus',
                 filter: (item) => {
-                    if (isIniciativaRechazada(item)) return false;
+                    if (isIniciativaImprocedente(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                     return !hasFieldInfo(dict) && !hasValidComision(com);
@@ -1031,7 +1039,7 @@
                 title: 'En Comisión / Turno Legis',
                 icon: 'bi-hourglass-split',
                 filter: (item) => {
-                    if (isIniciativaRechazada(item)) return false;
+                    if (isIniciativaImprocedente(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                     return !hasFieldInfo(dict) && hasValidComision(com);
@@ -1042,17 +1050,17 @@
                 title: 'Dictaminadas / Pleno',
                 icon: 'bi-clipboard2-check',
                 filter: (item) => {
-                    if (isIniciativaRechazada(item)) return false;
+                    if (isIniciativaImprocedente(item)) return false;
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                     return hasFieldInfo(dict);
                 }
             },
             {
-                id: 'rechazadas',
-                title: 'Rechazadas',
+                id: 'improcedentes',
+                title: 'Improcedentes',
                 icon: 'bi-x-circle-fill',
                 filter: (item) => {
-                    return isIniciativaRechazada(item);
+                    return isIniciativaImprocedente(item);
                 }
             }
         ],
@@ -1213,7 +1221,13 @@
             if (dict) {
                 const dictUp = String(dict).toUpperCase();
                 const isNeg = dictUp.includes('IMPROCEDENTE') || dictUp.includes('CONTRA') || dictUp.includes('RECHAZAD') || dictUp.includes('DESECHAD');
-                metaBadges.push(`<span class="badge ${isNeg ? 'badge-danger' : 'badge-success'}">${escapeHTML(dict)}</span>`);
+                const badgeText = (!isNaN(dict) && String(dict).trim() !== '') ? `Dict. #${dict}` : dict;
+                metaBadges.push(`<span class="badge ${isNeg ? 'badge-danger' : 'badge-success'}">${escapeHTML(badgeText)}</span>`);
+            }
+            const dec = getItemValue(item, 'decreto');
+            if (dec) {
+                const decText = (!isNaN(dec) && String(dec).trim() !== '') ? `Dec. #${dec}` : dec;
+                metaBadges.push(`<span class="badge" style="background:#EDE9FE; color:#5B21B6;"><i class="bi bi-file-earmark-check"></i> ${escapeHTML(decText)}</span>`);
             }
             const op = getItemValue(item, 'opinion');
             if (op) {
@@ -1833,6 +1847,16 @@
                         else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
                         metaHtml += ` <span class="badge ${badgeClass}">${escapeHTML(op)}</span>`;
                     }
+                    const dictVal = getItemValue(item, 'dictaminada_favor_contra');
+                    if (dictVal && !String(dictVal).toUpperCase().includes('IMPROCEDENTE')) {
+                        const dictText = (!isNaN(dictVal) && String(dictVal).trim() !== '') ? `Dict. #${dictVal}` : dictVal;
+                        metaHtml += ` <span class="badge badge-success">${escapeHTML(dictText)}</span>`;
+                    }
+                    const decVal = getItemValue(item, 'decreto');
+                    if (decVal) {
+                        const decText = (!isNaN(decVal) && String(decVal).trim() !== '') ? `Dec. #${decVal}` : decVal;
+                        metaHtml += ` <span class="badge" style="background:#EDE9FE; color:#5B21B6;"><i class="bi bi-file-earmark-check"></i> ${escapeHTML(decText)}</span>`;
+                    }
                     const inicFileFields = [
                         ['pdf', 'PDF'],
                         ['opinion_consultoria', 'OP. CONSULTORÍA'],
@@ -2283,9 +2307,12 @@
                     sourceData = autorizadosData;
                 }
 
+                const normValTarget = valTarget.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const options = sourceData.map(opt => {
                     const optUpper = String(opt).toUpperCase().trim();
+                    const normOptUpper = optUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                     const isSelected = (valTarget === optUpper) || 
+                                       (normValTarget && normValTarget === normOptUpper) ||
                                        (valTarget.includes('FAVOR') && optUpper.includes('FAVOR')) ||
                                        (valTarget.includes('CONTRA') && optUpper.includes('CONTRA'));
                     return `<option value="${escapeHTML(opt)}" ${isSelected ? 'selected' : ''}>${escapeHTML(opt)}</option>`;
@@ -2309,7 +2336,12 @@
                             const select = div.querySelector('select');
                             if (select) {
                                 select.innerHTML = `<option value="">SELECCIONE...</option>` +
-                                    currentData.map(opt => `<option value="${escapeHTML(opt)}" ${valTarget === opt ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('');
+                                    currentData.map(opt => {
+                                        const optUpper = String(opt).toUpperCase().trim();
+                                        const normOptUpper = optUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                        const isSelected = (valTarget === optUpper) || (normValTarget && normValTarget === normOptUpper);
+                                        return `<option value="${escapeHTML(opt)}" ${isSelected ? 'selected' : ''}>${escapeHTML(opt)}</option>`;
+                                    }).join('');
                             }
                         }
                     }).catch(() => { /* Silencioso */ });
@@ -2326,11 +2358,24 @@
                     <input type="${field.type}" name="${field.id}" value="${inputVal}">
                 `;
             } else {
+                let inputType = 'text';
+                let inputVal = safeValue;
+                if (field.type === 'email') {
+                    inputType = 'email';
+                } else if (field.type === 'number') {
+                    inputType = 'number';
+                    if (safeValue && isNaN(Number(safeValue))) {
+                        const matched = String(safeValue).match(/\d+/);
+                        inputVal = matched ? matched[0] : '';
+                    }
+                }
+
                 div.innerHTML = `
                     <label>${escapeHTML(field.name)} ${reqStar}</label>
-                    <input type="${field.type === 'email' ? 'email' : 'text'}" name="${field.id}" value="${safeValue}" 
+                    <input type="${inputType}" name="${field.id}" value="${inputVal}" 
                            placeholder="${field.readonly ? 'ID autogenerado' : 'Ingresa ' + escapeHTML(field.name.toLowerCase())}" 
-                           ${field.readonly ? 'readonly' : ''}>
+                           ${field.readonly ? 'readonly' : ''}
+                           ${field.type === 'number' ? 'min="0" step="1"' : ''}>
                 `;
             }
             fields.appendChild(div);
@@ -3348,6 +3393,8 @@
                                     } else {
                                         entry[key] = '';
                                     }
+                                } else if (fieldDef.type === 'number') {
+                                    entry[key] = trimmed !== '' ? (isNaN(Number(trimmed)) ? trimmed : Number(trimmed)) : '';
                                 } else {
                                     entry[key] = trimmed.toUpperCase();
                                 }

@@ -37,6 +37,61 @@ const SCHEMAS = {
 };
 
 /**
+ * Normaliza nombres de encabezados para búsquedas insensibles a mayúsculas y acentos
+ */
+function normalizeHeaderName(name) {
+    return String(name || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Busca el valor en data para un encabezado dado, probando coincidencia exacta,
+ * luego insensible a mayúsculas y acentos.
+ */
+function findDataValueForHeader(data, header) {
+    if (!data || typeof data !== 'object') return undefined;
+    if (data[header] !== undefined) return data[header];
+    const targetNorm = normalizeHeaderName(header);
+    for (const key of Object.keys(data)) {
+        if (normalizeHeaderName(key) === targetNorm) {
+            return data[key];
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Asegura que todas las columnas enviadas en data o en el esquema existan en la fila de encabezados.
+ * Si faltan columnas, las agrega al final de la fila 1 de la hoja.
+ */
+function ensureSheetColumns(sheet, requiredHeaders) {
+    const lastCol = sheet.getLastColumn();
+    let currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+    const currentNorm = currentHeaders.map(h => normalizeHeaderName(h));
+
+    const missing = [];
+    (requiredHeaders || []).forEach(req => {
+        if (!req || req === 'action' || req === 'table') return;
+        const norm = normalizeHeaderName(req);
+        if (!currentNorm.includes(norm)) {
+            missing.push(req);
+            currentNorm.push(norm);
+        }
+    });
+
+    if (missing.length > 0) {
+        missing.forEach(colName => {
+            const nextCol = sheet.getLastColumn() + 1;
+            const cell = sheet.getRange(1, nextCol);
+            cell.setValue(colName);
+            cell.setFontWeight('bold').setBackground('#f3f4f6');
+            currentHeaders.push(colName);
+        });
+    }
+
+    return currentHeaders;
+}
+
+/**
  * Función para inicializar la base de datos con hojas y encabezados.
  */
 function setupDatabase() {
@@ -52,6 +107,9 @@ function setupDatabase() {
             sheet.appendRow(headers);
             sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f3f4f6');
             sheet.setFrozenRows(1);
+        } else {
+            // Asegurar que columnas nuevas de SCHEMAS existan en la hoja existente
+            ensureSheetColumns(sheet, headers);
         }
     }
 
@@ -321,13 +379,15 @@ function handleCreate(tableName, data) {
         if (!sheet) return createJsonResponse({ success: false, error: `La hoja "${tableName}" no existe.` });
     }
 
-    const lastCol = sheet.getLastColumn();
-    const headers = sheet.getRange(1, 1, 1, Math.max(lastCol, 1)).getValues()[0];
+    // Asegurar que existan tanto las columnas del esquema como las enviadas en data
+    const schemaHeaders = SCHEMAS[tableName] || [];
+    const dataKeys = Object.keys(data || {});
+    const headers = ensureSheetColumns(sheet, [...schemaHeaders, ...dataKeys]);
 
     // Calcular el siguiente ID numérico
     let nextId = 1;
     if (sheet.getLastRow() > 1) {
-        const idColIdx = headers.indexOf('id') + 1;
+        const idColIdx = headers.findIndex(h => normalizeHeaderName(h) === 'id') + 1;
         if (idColIdx > 0) {
             const idValues = sheet.getRange(2, idColIdx, sheet.getLastRow() - 1, 1).getValues();
             const numericIds = idValues.map(r => Number(r[0])).filter(n => !isNaN(n) && n > 0);
@@ -340,7 +400,7 @@ function handleCreate(tableName, data) {
     data.id = nextId;
 
     const rowToAppend = headers.map(header => {
-        const val = data[header];
+        const val = findDataValueForHeader(data, header);
         if (val === undefined || val === null) return '';
         return val;
     });
@@ -360,11 +420,15 @@ function handleUpdate(tableName, id, data) {
     if (!sheet) return createJsonResponse({ success: false, error: `La hoja "${tableName}" no existe.` });
 
     const lastRow = sheet.getLastRow();
-    const lastCol = sheet.getLastColumn();
     if (lastRow <= 1) return createJsonResponse({ success: false, error: 'No hay registros para actualizar.' });
 
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    const idColIdx = headers.indexOf('id');
+    // Asegurar que existan tanto las columnas del esquema como las enviadas en data (ej: opinion)
+    const schemaHeaders = SCHEMAS[tableName] || [];
+    const dataKeys = Object.keys(data || {});
+    const headers = ensureSheetColumns(sheet, [...schemaHeaders, ...dataKeys]);
+    const lastCol = headers.length;
+
+    const idColIdx = headers.findIndex(h => normalizeHeaderName(h) === 'id');
     if (idColIdx === -1) return createJsonResponse({ success: false, error: 'Columna ID no encontrada.' });
 
     const allRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
@@ -383,11 +447,12 @@ function handleUpdate(tableName, id, data) {
 
     const currentRow = sheet.getRange(targetRowIndex, 1, 1, lastCol).getValues()[0];
     const updatedRow = headers.map((header, idx) => {
-        if (header === 'id') return currentRow[idx]; // Mantener ID original
-        if (data[header] !== undefined && data[header] !== null) {
-            return data[header];
+        if (normalizeHeaderName(header) === 'id') return currentRow[idx]; // Mantener ID original
+        const val = findDataValueForHeader(data, header);
+        if (val !== undefined && val !== null) {
+            return val;
         }
-        return currentRow[idx];
+        return currentRow[idx] !== undefined ? currentRow[idx] : '';
     });
 
     sheet.getRange(targetRowIndex, 1, 1, lastCol).setValues([updatedRow]);
