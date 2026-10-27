@@ -1487,7 +1487,7 @@
         if (!sessionRes || !sessionRes.success || !sessionRes.sessionUrl) {
             const errDetail = sessionRes?.error || 'No se recibió la URL de sesión de Google Drive';
             if (errDetail.includes('UrlFetchApp') || errDetail.includes('script.external_request')) {
-                throw new Error(`Para subir archivos mayores a 36 MB, autoriza el permiso en Google Apps Script: abre el editor de Apps Script, selecciona la función "setupDatabase" y haz clic en "Ejecutar" una vez para aceptar los permisos requeridos.`);
+                throw new Error(`Google Apps Script requiere autorizar la subida de archivos grandes: abre Apps Script, selecciona la función "autorizarPermisos" en la barra superior y presiona "Ejecutar" para aceptar los permisos de Google.`);
             }
             throw new Error(`No se pudo iniciar la carga directa de "${file.name}": ${errDetail}. Recuerda actualizar el despliegue en Google Apps Script.`);
         }

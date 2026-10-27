@@ -24,6 +24,18 @@
 
 const FOLDER_NAME = 'Correspondencia_Adjuntos';
 
+/**
+ * EJECUTA ESTA FUNCIÓN UNA SOLA VEZ DESDE EL EDITOR DE APPS SCRIPT:
+ * Selecciona "autorizarPermisos" en el menú desplegable superior y haz clic en "Ejecutar".
+ * Esto activará la ventana oficial de Google para aceptar los permisos requeridos
+ * para subir archivos grandes (hasta 55 MB).
+ */
+function autorizarPermisos() {
+    UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+    Logger.log('¡Permisos de subida autorizados con éxito!');
+    return '¡Permisos autorizados con éxito!';
+}
+
 const SCHEMAS = {
     recibida: ['id', 'Fecha_Recibido', 'Remite', 'Asunto', 'Recibio', 'fecha_evento', 'HORA', 'Lugar', 'TELEFONO', 'CORREO', 'PDF-Imagen'],
     despachada: ['id', 'Fecha', 'Elaboro', 'Dirigido', 'Asunto', 'Estatus', 'Recibió', 'Fecha_recepcion', 'TELEFONO', 'CORREO', 'Archivos y multimedia'],
