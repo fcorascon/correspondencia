@@ -241,7 +241,19 @@ function doPost(e) {
         }
 
         if (action === 'create_upload_session') {
-            return handleCreateUploadSession(payload.filename, payload.mimeType, payload.section);
+            return handleCreateUploadSession(payload.filename, payload.mimeType, payload.section, payload.origin);
+        }
+
+        if (action === 'upload_chunk') {
+            return handleUploadChunk(
+                payload.uploadId,
+                payload.chunkIndex,
+                payload.totalChunks,
+                payload.filename,
+                payload.mimeType,
+                payload.base64Chunk,
+                payload.section
+            );
         }
 
         if (action === 'upload_batch' || (action === 'upload' && Array.isArray(payload.files))) {
@@ -639,7 +651,7 @@ function handleUploadBatch(files, section) {
  * Permite al navegador transmitir archivos grandes (30 MB a 100 MB+) en formato binario directo,
  * superando el límite de 50 MB de cuerpo POST de Google Apps Script y eliminando la inflación de Base64.
  */
-function handleCreateUploadSession(filename, mimeType, section) {
+function handleCreateUploadSession(filename, mimeType, section, clientOrigin) {
     try {
         const targetFolder = getTargetFolder(section);
         const token = ScriptApp.getOAuthToken();
@@ -652,12 +664,17 @@ function handleCreateUploadSession(filename, mimeType, section) {
             parents: [targetFolder.getId()]
         };
 
+        const headers = {
+            Authorization: 'Bearer ' + token
+        };
+        if (clientOrigin && clientOrigin !== 'null' && clientOrigin !== '*') {
+            headers['Origin'] = clientOrigin;
+        }
+
         const response = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
             method: 'post',
             contentType: 'application/json; charset=UTF-8',
-            headers: {
-                Authorization: 'Bearer ' + token
-            },
+            headers: headers,
             payload: JSON.stringify(metadata),
             muteHttpExceptions: true
         });
@@ -667,8 +684,8 @@ function handleCreateUploadSession(filename, mimeType, section) {
             return createJsonResponse({ success: false, error: 'Error al iniciar sesión de Drive: ' + response.getContentText() });
         }
 
-        const headers = response.getAllHeaders();
-        const sessionUrl = headers['Location'] || headers['location'];
+        const respHeaders = response.getAllHeaders();
+        const sessionUrl = respHeaders['Location'] || respHeaders['location'];
         if (!sessionUrl) {
             return createJsonResponse({ success: false, error: 'No se obtuvo la URL de sesión de Google Drive.' });
         }
@@ -680,6 +697,66 @@ function handleCreateUploadSession(filename, mimeType, section) {
         });
     } catch (err) {
         return createJsonResponse({ success: false, error: 'Error en create_upload_session: ' + err.toString() });
+    }
+}
+
+/**
+ * Recibe y ensambla archivos grandes por partes (hasta 55 MB+) sin restricciones de CORS ni límites POST
+ */
+function handleUploadChunk(uploadId, chunkIndex, totalChunks, filename, mimeType, base64Chunk, section) {
+    try {
+        const targetFolder = getTargetFolder(section);
+        const decodedBytes = Utilities.base64Decode(base64Chunk);
+        const chunkBlob = Utilities.newBlob(decodedBytes, 'application/octet-stream', `_tmp_${uploadId}_${chunkIndex}`);
+        targetFolder.createFile(chunkBlob);
+
+        // Si es el último fragmento, ensamblamos todas las partes en el archivo definitivo
+        if (chunkIndex === totalChunks - 1) {
+            let totalBytes = 0;
+            const partFiles = [];
+            for (let i = 0; i < totalChunks; i++) {
+                const files = targetFolder.getFilesByName(`_tmp_${uploadId}_${i}`);
+                if (!files.hasNext()) {
+                    return createJsonResponse({ success: false, error: `Falta la parte ${i + 1} de la carga.` });
+                }
+                const f = files.next();
+                partFiles.push(f);
+                totalBytes += f.getSize();
+            }
+
+            const combinedBytes = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (let i = 0; i < partFiles.length; i++) {
+                const f = partFiles[i];
+                const b = f.getBlob().getBytes();
+                combinedBytes.set(b, offset);
+                offset += b.length;
+                try { f.setTrashed(true); } catch (_) {}
+            }
+
+            const cleanFilename = (filename || 'archivo').replace(/[^a-zA-Z0-9._\-áéíóúÁÉÍÓÚñÑ ]/g, '_');
+            const uniqueName = `${new Date().getTime()}_${cleanFilename}`;
+            const finalBlob = Utilities.newBlob(Array.from(combinedBytes), mimeType || 'application/octet-stream', uniqueName);
+            const finalFile = targetFolder.createFile(finalBlob);
+            try {
+                finalFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            } catch (_) {}
+
+            return createJsonResponse({
+                success: true,
+                fileId: finalFile.getId(),
+                publicUrl: `https://drive.google.com/file/d/${finalFile.getId()}/preview`,
+                viewUrl: finalFile.getUrl()
+            });
+        }
+
+        return createJsonResponse({
+            success: true,
+            chunkReceived: chunkIndex + 1,
+            totalChunks: totalChunks
+        });
+    } catch (err) {
+        return createJsonResponse({ success: false, error: 'Error al procesar parte del archivo: ' + err.toString() });
     }
 }
 

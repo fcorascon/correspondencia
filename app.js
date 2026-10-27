@@ -1478,10 +1478,15 @@
     async function uploadLargeFileResumable(file, onProgress = null) {
         if (onProgress) onProgress(`Iniciando sesión de Drive para "${file.name}"...`);
 
+        const clientOrigin = (window.location && window.location.origin && window.location.origin !== 'null') 
+            ? window.location.origin 
+            : '*';
+
         const sessionRes = await apiRequest('create_upload_session', {
             filename: file.name,
             mimeType: file.type || 'application/octet-stream',
-            section: currentSection
+            section: currentSection,
+            origin: clientOrigin
         }, 'POST');
 
         if (!sessionRes || !sessionRes.success || !sessionRes.sessionUrl) {
@@ -1529,6 +1534,67 @@
             xhr.ontimeout = () => reject(new Error(`Tiempo de espera agotado al subir "${file.name}".`));
             xhr.send(file);
         });
+    }
+
+    /**
+     * Canal seguro de subida en partes: permite subir archivos de hasta 55 MB directamente
+     * a través de Google Apps Script sin requerir CORS del navegador ni conexiones externas.
+     */
+    async function uploadFileInChunks(file, onProgress = null) {
+        const CHUNK_SIZE = 22 * 1024 * 1024; // 22 MB por parte (~29 MB en Base64, dentro del límite de Apps Script)
+        const totalSize = file.size;
+        const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+        const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
+        let finalUrl = null;
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+            const start = chunkIndex * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, totalSize);
+            const chunkBlob = file.slice(start, end);
+
+            const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+            if (onProgress) onProgress(`Subiendo "${file.name}" (parte ${chunkIndex + 1} de ${totalChunks}, ${percent}%)...`);
+
+            const base64Chunk = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const res = reader.result || '';
+                    const base64 = String(res).split(',')[1] || '';
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(chunkBlob);
+            });
+
+            if (chunkIndex === totalChunks - 1 && onProgress) {
+                onProgress(`Guardando y ensamblando "${file.name}" en Google Drive...`);
+            }
+
+            const res = await apiRequest('upload_chunk', {
+                uploadId: uploadId,
+                chunkIndex: chunkIndex,
+                totalChunks: totalChunks,
+                filename: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                base64Chunk: base64Chunk,
+                section: currentSection
+            }, 'POST');
+
+            if (!res || !res.success) {
+                throw new Error(res?.error || `Error al procesar la parte ${chunkIndex + 1} de "${file.name}".`);
+            }
+
+            if (chunkIndex === totalChunks - 1) {
+                finalUrl = res.publicUrl || res.viewUrl;
+            }
+        }
+
+        if (!finalUrl) {
+            throw new Error(`Google Drive no devolvió el enlace para "${file.name}".`);
+        }
+
+        return finalUrl;
     }
 
     async function uploadFiles(files, limit = 10, onProgress = null) {
@@ -1581,23 +1647,17 @@
                 });
                 allUrls.push(url);
             } catch (resumableErr) {
-                console.warn(`Carga resumable no disponible para "${file.name}":`, resumableErr);
-                // Si el archivo es menor a 36 MB, realizar subida directa por Apps Script como canal de respaldo
-                if (file.size <= 36 * 1024 * 1024) {
-                    if (onProgress) onProgress(`Subiendo "${file.name}" por canal alternativo...`);
-                    const base64 = await fileToBase64(file);
-                    const res = await apiRequest('upload', {
-                        filename: file.name,
-                        mimeType: file.type || 'application/octet-stream',
-                        base64: base64,
-                        section: currentSection
-                    }, 'POST');
-                    if (res && res.success) {
-                        allUrls.push(res.publicUrl || res.viewUrl);
-                        continue;
-                    }
+                console.warn(`Carga resumable directa no disponible para "${file.name}", usando canal seguro por partes:`, resumableErr);
+                try {
+                    if (onProgress) onProgress(`Subiendo "${file.name}" a Google Drive por canal seguro...`);
+                    const chunkUrl = await uploadFileInChunks(file, (msg) => {
+                        if (onProgress) onProgress(largeFiles.length > 1 ? `[${i + 1}/${largeFiles.length}] ${msg}` : msg);
+                    });
+                    allUrls.push(chunkUrl);
+                } catch (fallbackErr) {
+                    console.error(`Fallo en canal seguro para "${file.name}":`, fallbackErr);
+                    throw fallbackErr;
                 }
-                throw resumableErr;
             }
         }
 
