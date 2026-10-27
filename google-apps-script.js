@@ -674,6 +674,7 @@ function handleUpload(filename, mimeType, base64Data, section) {
         const blob = Utilities.newBlob(decodedBytes, mimeType || 'application/octet-stream', uniqueName);
 
         const file = targetFolder.createFile(blob);
+        try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (_) {}
         const fileId = file.getId();
         const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
         const viewUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;

@@ -2500,14 +2500,17 @@
                 })
                 .catch(err => {
                     console.warn('Pre-subida en segundo plano:', err);
+                    input._uploadPromise = null;
+                    input._uploadedUrls = null;
                     if (helpEl && input.files === currentFilesRef) {
                         helpEl.innerHTML = `
                             <span style="color:var(--text-muted);">
-                                ${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${totalMb} MB). Se completará al hacer clic en Guardar.
+                                ${count} archivo${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''} (${totalMb} MB). Se subirá a Drive al hacer clic en Guardar.
                             </span>
                             ${warning}
                         `;
                     }
+                    return null;
                 });
         }
     };
@@ -3382,24 +3385,41 @@
                             if (files && files.length > 0) {
                                 let uploaded = null;
                                 if (input && input._uploadedUrls) {
-                                    // ¡Ya subido en segundo plano! Cero tiempo de espera
                                     uploaded = input._uploadedUrls;
                                 } else if (input && input._uploadPromise) {
-                                    // Ya se estaba subiendo en segundo plano, esperamos que complete
-                                    setProgress("Completando subida de archivos...");
-                                    uploaded = await input._uploadPromise;
-                                } else {
-                                    // Subida directa
+                                    try {
+                                        setProgress("Completando subida de archivos a Drive...");
+                                        uploaded = await input._uploadPromise;
+                                    } catch (_) {
+                                        uploaded = null;
+                                    }
+                                }
+
+                                // Si no se obtuvo resultado de la pre-subida, forzar subida directa garantizada
+                                if (!uploaded) {
+                                    setProgress(`Subiendo ${files.length} archivo${files.length > 1 ? 's' : ''} a Google Drive...`);
                                     uploaded = await uploadFiles(files, maxFiles, (msg) => setProgress(msg));
                                 }
 
-                                if (uploaded) {
-                                    const newUrls = JSON.parse(uploaded);
-                                    const combined = keptUrls.concat(newUrls).slice(0, maxFiles);
-                                    entry[key] = JSON.stringify(combined);
-                                } else if (keptUrls.length > 0) {
-                                    entry[key] = JSON.stringify(keptUrls);
+                                if (!uploaded) {
+                                    throw new Error(`No se pudieron subir los archivos adjuntos a Google Drive. Por favor verifica tu conexión.`);
                                 }
+
+                                let newUrls = [];
+                                try {
+                                    const parsed = JSON.parse(uploaded);
+                                    if (Array.isArray(parsed)) newUrls = parsed;
+                                    else if (typeof parsed === 'string' && parsed.trim()) newUrls = [parsed.trim()];
+                                } catch (_) {
+                                    if (typeof uploaded === 'string' && uploaded.startsWith('http')) newUrls = [uploaded.trim()];
+                                }
+
+                                if (newUrls.length === 0) {
+                                    throw new Error(`Google Drive no devolvió enlaces válidos para los archivos adjuntos.`);
+                                }
+
+                                const combined = keptUrls.concat(newUrls).slice(0, maxFiles);
+                                entry[key] = JSON.stringify(combined);
                             } else if (container) {
                                 // No new upload — save whatever the user kept (may be empty = all deleted)
                                 entry[key] = keptUrls.length > 0 ? JSON.stringify(keptUrls) : null;
