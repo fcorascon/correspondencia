@@ -55,7 +55,7 @@
             { id: 'fecha_turno_legis', name: 'TURNO LEGIS', type: 'date' },
             { id: 'fecha_pleno', name: 'PLENO', type: 'date' },
             { id: 'dictaminada_favor_contra', name: 'DICTAMEN', type: 'number' },
-            { id: 'opinion', name: 'OPINIÓN', type: 'select', options: ['PROCEDENTE', 'IMPROCEDENTE', 'EN TRÁMITE'] },
+            { id: 'status', name: 'STATUS', type: 'select', options: ['PROCEDENTE', 'IMPROCEDENTE', 'EN TRÁMITE', 'RETIRADA'] },
             { id: 'decreto', name: 'DECRETO', type: 'number' },
             { id: 'objeto', name: 'OBJETO', type: 'text', full: true },
             { id: 'pdf', name: 'PDF', type: 'file', maxFiles: 10 },
@@ -136,7 +136,8 @@
             'fecha_ingreso_procepar': ['fecha_ingreso_procepar', 'FECHA_INGRESO_PROCEPAR', 'INGRESO PROCEPAR', 'INGRESO_PROCEPAR'],
             'fecha_acuse_recibido_autoridad': ['fecha_acuse_recibido_autoridad', 'FECHA_ACUSE_RECIBIDO_AUTORIDAD', 'ACUSE AUTORIDAD', 'ACUSE_AUTORIDAD'],
             'fecha_respuesta_autoridad': ['fecha_respuesta_autoridad', 'FECHA_RESPUESTA_AUTORIDAD', 'RESPUESTA AUTORIDAD', 'RESPUESTA_AUTORIDAD'],
-            'opinion': ['opinion', 'OPINION', 'OPINIÓN', 'sentido_opinion', 'opinion_sentido'],
+            'status': ['status', 'STATUS', 'estatus', 'ESTATUS', 'opinion', 'OPINION', 'OPINIÓN', 'sentido_opinion', 'opinion_sentido'],
+            'opinion': ['opinion', 'OPINION', 'OPINIÓN', 'status', 'STATUS', 'estatus', 'ESTATUS', 'sentido_opinion', 'opinion_sentido'],
             'dictaminada_favor_contra': ['dictaminada_favor_contra', 'DICTAMINADA_FAVOR_CONTRA', 'dictamen', 'DICTAMEN', 'sentido_dictamen', 'sentido'],
             'decreto': ['decreto', 'DECRETO', 'num_decreto', 'numero_decreto']
         };
@@ -181,7 +182,7 @@
 
     function isIniciativaImprocedente(item) {
         if (!item) return false;
-        const op = String(getItemValue(item, 'opinion') || '').toUpperCase().trim();
+        const op = String(getItemValue(item, 'status') || getItemValue(item, 'opinion') || '').toUpperCase().trim();
         if (op) {
             return op.includes('IMPROCEDENTE');
         }
@@ -1229,13 +1230,14 @@
                 const decText = (!isNaN(dec) && String(dec).trim() !== '') ? `Dec. #${dec}` : dec;
                 metaBadges.push(`<span class="badge" style="background:#EDE9FE; color:#5B21B6;"><i class="bi bi-file-earmark-check"></i> ${escapeHTML(decText)}</span>`);
             }
-            const op = getItemValue(item, 'opinion');
+            const op = getItemValue(item, 'status') || getItemValue(item, 'opinion');
             if (op) {
                 let badgeClass = 'badge-info';
                 const opUp = op.toUpperCase();
                 if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
                 else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
                 else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
+                else if (opUp.includes('RETIRAD')) badgeClass = 'badge-secondary';
                 metaBadges.push(`<span class="badge ${badgeClass}">${escapeHTML(op)}</span>`);
             }
             fileLinks = renderFileLinks(getItemValue(item, 'pdf'));
@@ -1867,13 +1869,14 @@
                     subtitleVal = getItemValue(item, 'texto') || getItemValue(item, 'INICIATIVA');
                     detailVal = getItemValue(item, 'comision') || 'SIN COMISIÓN';
                     metaHtml = `<span class="badge badge-warning">${escapeHTML(formatDateDMY(getItemValue(item, 'fecha_oficio')) || 'OFICIO')}</span>`;
-                    const op = getItemValue(item, 'opinion');
+                    const op = getItemValue(item, 'status') || getItemValue(item, 'opinion');
                     if (op) {
                         let badgeClass = 'badge-info';
                         const opUp = op.toUpperCase();
                         if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
                         else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
                         else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
+                        else if (opUp.includes('RETIRAD')) badgeClass = 'badge-secondary';
                         metaHtml += ` <span class="badge ${badgeClass}">${escapeHTML(op)}</span>`;
                     }
                     const dictVal = getItemValue(item, 'dictaminada_favor_contra');
@@ -3451,6 +3454,11 @@
                                 entry[key] = val;
                             }
                         }
+                    }
+
+                    // En iniciativas, sincronizar status y opinion para total compatibilidad con Google Sheets
+                    if (currentSection === 'iniciativas' && entry.status !== undefined) {
+                        entry.opinion = entry.status;
                     }
 
                     if (!GOOGLE_SCRIPT_URL) {

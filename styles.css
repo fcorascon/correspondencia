@@ -853,6 +853,12 @@ main {
     color: var(--danger-text);
 }
 
+.badge-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
 .action-cell {
     text-align: left;
 }
