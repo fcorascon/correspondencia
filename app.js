@@ -1533,12 +1533,21 @@
             return null;
         }
 
+        const MAX_FILE_SIZE = 55 * 1024 * 1024;
         const fileList = Array.from(files).slice(0, limit);
-        const total = fileList.length;
+        const validFiles = fileList.filter(f => {
+            if (f.size > MAX_FILE_SIZE) {
+                showToast(`El archivo "${f.name}" supera el límite de 55 MB y fue omitido.`, 'warning');
+                return false;
+            }
+            return true;
+        });
+        if (validFiles.length === 0) return null;
+        const total = validFiles.length;
 
         // Paso 1: Optimización de imágenes y clasificación por tamaño
         if (onProgress) onProgress(total > 1 ? `Preparando ${total} archivos...` : 'Preparando archivo...');
-        const optimizedFiles = await Promise.all(fileList.map(async (file) => {
+        const optimizedFiles = await Promise.all(validFiles.map(async (file) => {
             return await compressImageIfNeeded(file);
         }));
 
