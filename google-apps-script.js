@@ -144,6 +144,11 @@ function setupDatabase() {
         try { ss.deleteSheet(defaultSheet); } catch (e) { }
     }
 
+    // Registrar ámbito para UrlFetchApp (permiso script.external_request para subidas > 30 MB)
+    try {
+        UrlFetchApp.getRequest('https://www.google.com');
+    } catch (_) { }
+
     return 'Base de datos configurada exitosamente.';
 }
 

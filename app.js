@@ -1551,9 +1551,9 @@
             return await compressImageIfNeeded(file);
         }));
 
-        // Clasificar: archivos mayores a 20 MB (hasta 55 MB) se suben directamente vía Resumable Upload
-        // para garantizar que nunca se supere el límite de 50 MB de cuerpo POST de Google Apps Script.
-        const LARGE_FILE_THRESHOLD = 20 * 1024 * 1024;
+        // Clasificar: archivos mayores a 30 MB (hasta 55 MB) se suben preferentemente vía Resumable Upload
+        // Archivos hasta 30 MB caben directamente en el cuerpo POST (< 50 MB) de Google Apps Script.
+        const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
         const largeFiles = [];
         const standardFiles = [];
 
@@ -1567,13 +1567,33 @@
 
         const allUrls = [];
 
-        // Paso 2: Subida de archivos grandes (> 20 MB) directamente a Google Drive (sin pasar por Base64 ni Apps Script)
+        // Paso 2: Subida de archivos de gran tamaño (> 30 MB)
         for (let i = 0; i < largeFiles.length; i++) {
             const file = largeFiles[i];
-            const url = await uploadLargeFileResumable(file, (msg) => {
-                if (onProgress) onProgress(largeFiles.length > 1 ? `[${i + 1}/${largeFiles.length}] ${msg}` : msg);
-            });
-            allUrls.push(url);
+            try {
+                const url = await uploadLargeFileResumable(file, (msg) => {
+                    if (onProgress) onProgress(largeFiles.length > 1 ? `[${i + 1}/${largeFiles.length}] ${msg}` : msg);
+                });
+                allUrls.push(url);
+            } catch (resumableErr) {
+                console.warn(`Carga resumable no disponible para "${file.name}":`, resumableErr);
+                // Si el archivo es menor a 36 MB, realizar subida directa por Apps Script como canal de respaldo
+                if (file.size <= 36 * 1024 * 1024) {
+                    if (onProgress) onProgress(`Subiendo "${file.name}" por canal alternativo...`);
+                    const base64 = await fileToBase64(file);
+                    const res = await apiRequest('upload', {
+                        filename: file.name,
+                        mimeType: file.type || 'application/octet-stream',
+                        base64: base64,
+                        section: currentSection
+                    }, 'POST');
+                    if (res && res.success) {
+                        allUrls.push(res.publicUrl || res.viewUrl);
+                        continue;
+                    }
+                }
+                throw resumableErr;
+            }
         }
 
         // Paso 3: Subida de archivos estándar (<= 20 MB)
@@ -2432,8 +2452,8 @@
         const count = input.files.length;
 
         let warning = '';
-        if (totalBytes > 20 * 1024 * 1024) {
-            warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se utilizará transmisión directa resumable a Google Drive.</span>`;
+        if (totalBytes > 30 * 1024 * 1024) {
+            warning = `<span style="color:#b54708; display:block; margin-top:2px;">ℹ️ Carga de gran tamaño (${totalMb} MB). Se utilizará transmisión directa a Google Drive.</span>`;
         }
 
         if (helpEl) {
