@@ -180,8 +180,15 @@
         return true;
     }
 
+    function isIniciativaRetirada(item) {
+        if (!item) return false;
+        const op = String(getItemValue(item, 'status') || getItemValue(item, 'opinion') || '').toUpperCase().trim();
+        return op.includes('RETIRAD') || op.includes('RETIRO');
+    }
+
     function isIniciativaImprocedente(item) {
         if (!item) return false;
+        if (isIniciativaRetirada(item)) return false;
         const op = String(getItemValue(item, 'status') || getItemValue(item, 'opinion') || '').toUpperCase().trim();
         if (op) {
             return op.includes('IMPROCEDENTE');
@@ -711,35 +718,45 @@
     const statFiltersConfig = {
         iniciativas: {
             comision: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 if (isIniciativaImprocedente(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasValidComision(com) && !hasFieldInfo(dict);
             },
             dictaminadas: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 if (isIniciativaImprocedente(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasFieldInfo(dict);
             },
             dictamen: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 if (isIniciativaImprocedente(item)) return false;
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return hasFieldInfo(dict);
             },
             improcedentes: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 return isIniciativaImprocedente(item);
             },
             rechazadas: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 return isIniciativaImprocedente(item);
             },
             decreto: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 return isIniciativaImprocedente(item);
             },
             oficialia: (item) => {
+                if (isIniciativaRetirada(item)) return false;
                 if (isIniciativaImprocedente(item)) return false;
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                 return !hasValidComision(com) && !hasFieldInfo(dict);
+            },
+            retiradas: (item) => {
+                return isIniciativaRetirada(item);
             }
         },
         recibida: {
@@ -903,6 +920,7 @@
             });
         } else if (currentSection === 'iniciativas') {
             data.forEach(item => {
+                if (isIniciativaRetirada(item)) return;
                 const isImproc = isIniciativaImprocedente(item);
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
@@ -1029,6 +1047,7 @@
                 title: 'Presentadas / Oficialía',
                 icon: 'bi-file-earmark-plus',
                 filter: (item) => {
+                    if (isIniciativaRetirada(item)) return false;
                     if (isIniciativaImprocedente(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
@@ -1040,6 +1059,7 @@
                 title: 'En Comisión / Turno Legis',
                 icon: 'bi-hourglass-split',
                 filter: (item) => {
+                    if (isIniciativaRetirada(item)) return false;
                     if (isIniciativaImprocedente(item)) return false;
                     const com = getItemValue(item, 'comision');
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
@@ -1051,6 +1071,7 @@
                 title: 'Dictaminadas / Pleno',
                 icon: 'bi-clipboard2-check',
                 filter: (item) => {
+                    if (isIniciativaRetirada(item)) return false;
                     if (isIniciativaImprocedente(item)) return false;
                     const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
                     return hasFieldInfo(dict);
@@ -1061,7 +1082,16 @@
                 title: 'Improcedentes',
                 icon: 'bi-x-circle-fill',
                 filter: (item) => {
+                    if (isIniciativaRetirada(item)) return false;
                     return isIniciativaImprocedente(item);
+                }
+            },
+            {
+                id: 'retiradas',
+                title: 'Retiradas',
+                icon: 'bi-archive-fill',
+                filter: (item) => {
+                    return isIniciativaRetirada(item);
                 }
             }
         ],
@@ -1237,7 +1267,7 @@
                 if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
                 else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
                 else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
-                else if (opUp.includes('RETIRAD')) badgeClass = 'badge-secondary';
+                else if (opUp.includes('RETIRAD') || opUp.includes('RETIRO')) badgeClass = 'badge-secondary';
                 metaBadges.push(`<span class="badge ${badgeClass}">${escapeHTML(op)}</span>`);
             }
             fileLinks = renderFileLinks(getItemValue(item, 'pdf'));
@@ -1939,7 +1969,7 @@
                         if (opUp.includes('IMPROCEDENTE')) badgeClass = 'badge-danger';
                         else if (opUp.includes('PROCEDENTE')) badgeClass = 'badge-success';
                         else if (opUp.includes('TRÁMITE') || opUp.includes('TRAMITE')) badgeClass = 'badge-warning';
-                        else if (opUp.includes('RETIRAD')) badgeClass = 'badge-secondary';
+                        else if (opUp.includes('RETIRAD') || opUp.includes('RETIRO')) badgeClass = 'badge-secondary';
                         metaHtml += ` <span class="badge ${badgeClass}">${escapeHTML(op)}</span>`;
                     }
                     const dictVal = getItemValue(item, 'dictaminada_favor_contra');
