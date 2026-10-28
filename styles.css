@@ -383,6 +383,7 @@ main {
 .stat-icon-amber { background: rgba(181, 71, 8, 0.1); color: #B54708; }
 .stat-icon-red { background: rgba(180, 35, 24, 0.1); color: #B42318; }
 .stat-icon-indigo { background: rgba(53, 56, 205, 0.1); color: #3538CD; }
+.stat-icon-gray { background: rgba(100, 116, 139, 0.12); color: #64748B; }
 
 .stat-content {
     flex: 1;

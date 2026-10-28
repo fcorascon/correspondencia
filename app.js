@@ -837,7 +837,8 @@
             { id: 'total', label: 'Total Iniciativas', icon: 'bi-file-earmark-text', iconClass: 'stat-icon-blue' },
             { id: 'comision', label: 'En Comisión', icon: 'bi-hourglass-split', iconClass: 'stat-icon-purple' },
             { id: 'dictaminadas', label: 'Dictaminadas / Pleno', icon: 'bi-clipboard2-check', iconClass: 'stat-icon-indigo' },
-            { id: 'improcedentes', label: 'Improcedentes', icon: 'bi-x-circle', iconClass: 'stat-icon-red' }
+            { id: 'improcedentes', label: 'Improcedentes', icon: 'bi-x-circle', iconClass: 'stat-icon-red' },
+            { id: 'retiradas', label: 'Retiradas', icon: 'bi-archive-fill', iconClass: 'stat-icon-gray' }
         ],
         proposiciones: [
             { id: 'total', label: 'Total Proposiciones', icon: 'bi-pencil-square', iconClass: 'stat-icon-blue' },
@@ -888,7 +889,8 @@
             card0: data.length,
             card1: 0,
             card2: 0,
-            card3: 0
+            card3: 0,
+            card4: 0
         };
 
         if (currentSection === 'recibida') {
@@ -920,7 +922,10 @@
             });
         } else if (currentSection === 'iniciativas') {
             data.forEach(item => {
-                if (isIniciativaRetirada(item)) return;
+                if (isIniciativaRetirada(item)) {
+                    counts.card4++;
+                    return;
+                }
                 const isImproc = isIniciativaImprocedente(item);
                 const com = getItemValue(item, 'comision');
                 const dict = getItemValue(item, 'dictaminada_favor_contra') || getItemValue(item, 'dictamen');
@@ -959,7 +964,7 @@
         }
 
         let html = '';
-        const values = [counts.card0, counts.card1, counts.card2, counts.card3];
+        const values = [counts.card0, counts.card1, counts.card2, counts.card3, counts.card4];
         config.forEach((c, idx) => {
             const isActive = activeStatFilter === c.id;
             html += `
